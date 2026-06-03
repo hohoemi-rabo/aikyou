@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSupabase } from "@/lib/supabase";
 import { createPlaythrough } from "./actions";
+import DeletePlaythroughButton from "./delete-playthrough-button";
 import type { Playthrough } from "@/types/playthrough";
 
 // 一覧は常に最新を表示する（キャッシュしない）。
@@ -103,10 +104,10 @@ export default async function Home() {
         ) : (
           <ul className="mt-3 divide-y divide-slate-700 rounded-lg border border-slate-700 bg-slate-800">
             {playthroughs.map((p) => (
-              <li key={p.id}>
+              <li key={p.id} className="flex items-center hover:bg-slate-700">
                 <Link
                   href={`/play/${p.id}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-700"
+                  className="flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3"
                 >
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-slate-100">{p.title}</span>
@@ -121,6 +122,7 @@ export default async function Home() {
                     {new Date(p.updated_at).toLocaleString("ja-JP")}
                   </time>
                 </Link>
+                <DeletePlaythroughButton id={p.id} title={p.title} />
               </li>
             ))}
           </ul>

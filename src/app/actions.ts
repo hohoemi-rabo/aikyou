@@ -48,6 +48,23 @@ export async function createPlaythrough(formData: FormData) {
 }
 
 /**
+ * プレイスルーを削除する（関連する messages は FK の on delete cascade で一緒に消える）。
+ * 一覧画面の削除ボタンから呼ばれる。
+ */
+export async function deletePlaythrough(id: string) {
+  if (!id) throw new Error("id が必要です。");
+
+  const supabase = getSupabase();
+  const { error } = await supabase.from("playthroughs").delete().eq("id", id);
+
+  if (error) {
+    throw new Error(`プレイスルーの削除に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath("/");
+}
+
+/**
  * 相棒のペルソナ（名前・口調・性格）を更新する。
  * セッション画面の「相棒の設定」から呼ばれる。
  */
