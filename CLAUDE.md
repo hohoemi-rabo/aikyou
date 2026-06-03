@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 「あいきょう / AI Kyou」— a **single-user companion AI** for playing retro games (Phase 1 target: Famicom Dragon Quest 3) while talking to an AI partner. The real deliverable is a YouTube video of "playing an old game while chatting with an AI," not a public web service. There is one user (the developer); no auth, no multi-tenancy.
 
-The codebase is currently a near-empty `create-next-app` scaffold. **`REQUIREMENTS.md` is the source of truth** for what to build — read it before implementing. It is a Phase 1 (MVP) implementation spec, and its "やらないこと (things NOT to do)" list is a hard constraint.
+**Status:** Phase 1 (MVP) is complete, and four Phase 2 features are now built — AI persona, conversation-history persistence, YouTube log export, and voice (STT/TTS). See `docs/09-phase2-overview.md`. **`REQUIREMENTS.md` remains the source of truth for intent**, but its §4.2 "やらないこと" list is no longer a blanket constraint: the Phase 2 items listed there have been deliberately implemented. Still **out of scope**: retrieval/RAG and multi-game support (see Scope discipline below).
 
 ## Commands
 
@@ -23,7 +23,7 @@ No test runner is configured yet. Deployment is out of scope — this only needs
 
 Next.js 15 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v3 · Supabase (`@supabase/...`) · Anthropic SDK (`@anthropic-ai/sdk`). Path alias `@/*` → `src/*`.
 
-- **Models:** all endpoints use **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`). The only sanctioned exception: `/api/end-session` may be raised to Sonnet 4.6 (`claude-sonnet-4-6`) if state JSON output is unreliable (it runs once per session, so cost is negligible). Chat stays on Haiku.
+- **Models:** all endpoints (`/api/chat`, `/api/end-session`, `/api/export-log`) use **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`). The only sanctioned exception: `/api/end-session` may be raised to Sonnet 4.6 (`claude-sonnet-4-6`) if state JSON output is unreliable (it runs once per session, so cost is negligible). Chat stays on Haiku.
 - **API key:** `ANTHROPIC_API_KEY`, server-side only — never expose to the client. All Anthropic calls go through Next.js API Routes.
 - Supabase RLS and auth are intentionally **not** configured (local/limited environment).
 
@@ -31,12 +31,16 @@ Next.js 15 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v3 ·
 
 ### 1. Continuity lives in `state`, not chat history
 
-RPGs span many sessions. Conversation history is held **only in client memory for the current session** (it's fine for it to vanish on reload). Cross-session continuity is carried entirely by a single `state` JSON blob.
+RPGs span many sessions. **Cross-session continuity is carried entirely by a single `state` JSON blob** — this is still the load-bearing idea. The live chat keeps history in client memory for the current session; conversation is *also* persisted to a `messages` table (Phase 2), but only for review/log export, **not** for continuity. The `messages` table is never replayed into the chat or used to rebuild state.
 
-- One Supabase table: **`playthroughs`** (`id`, `title`, `game_version`, `state jsonb`, timestamps). No other tables. `game_version` is required and load-bearing (see below).
-- `state` holds `party / location / progress / next_goals / notes`. Treat the schema **loosely** — the AI may add fields; don't enforce a rigid shape. Required keys: `party`, `location`, `next_goals`.
-- **`POST /api/chat`** — server loads `state` from DB, builds the system prompt, returns the AI's text reply.
-- **`POST /api/end-session`** — server sends current `state` + the full session conversation and asks Claude to emit **only the new state JSON**. Parse defensively: strip ```json fences, `JSON.parse`, and on failure keep the old state and surface the error. On success, update `state` + `updated_at`.
+- Supabase tables (RLS/auth intentionally off, local single-user):
+  - **`playthroughs`** — `id`, `title`, `game_version`, `state jsonb`, **`persona jsonb`** (Phase 2), timestamps. `game_version` is required and load-bearing (see below).
+  - **`messages`** (Phase 2) — `id`, `playthrough_id` (FK → `playthroughs`, `on delete cascade`), `role`, `content`, `created_at`. Conversation log for the ふりかえり view and log export.
+- `state` holds `party / location / progress / next_goals / notes`. Treat the schema **loosely** — the AI may add fields (and may return strings as nested objects); don't enforce a rigid shape and render defensively. Required keys: `party`, `location`, `next_goals`.
+- `persona` (`name / tone / personality`, also loose) is the relationship-defining AI character; it's injected into the cached system instructions per playthrough.
+- **`POST /api/chat`** — loads `state` + `persona`, builds the system prompt, **streams** the reply (`ReadableStream` of Anthropic text deltas). After the stream completes it persists the user message + assistant reply to `messages` (best-effort: a save failure is logged, never breaks the reply).
+- **`POST /api/end-session`** — sends current `state` + the full session conversation and asks Claude to emit **only the new state JSON**. Parse defensively: strip ```json fences, `JSON.parse`, and on failure keep the old state and surface the error. On success, update `state` + `updated_at`.
+- **`POST /api/export-log`** (Phase 2) — formats the session conversation into a YouTube-ready summary (title ideas / overview / highlights / next-up) for copy-paste.
 
 ### 2. Knowledge is injected wholesale into the prompt, with caching
 
@@ -44,7 +48,7 @@ The Claude API does **not** open URLs. "Making the AI aware" of strategy knowled
 
 - Strategy knowledge lives in **`knowledge/dq3-fc/`** (~48 markdown files split by job/town/dungeon/etc., plus `_ai-notes.md` for meta-guidance). This is at the **repo root, not `public/` and not `src/`** — `public/` would expose it via URL; it must be read server-side only via `path.join(process.cwd(), 'knowledge', 'dq3-fc')`.
 - Read **all** `.md` files and concatenate into one string. **Sort by filename deterministically** (`readdir` order is OS-dependent) and pin **`_ai-notes.md` first**. Deterministic order is what makes prompt caching hit. Cache the concatenated result in memory; don't re-read files per request.
-- **Prompt cache is effectively required** (concatenated knowledge ≈ 40k tokens). Order the prompt as: (1) system instructions + concatenated knowledge — invariant, **this is the cache target, keep it at the very front**; (2) current `state`; (3) session conversation. Don't reorder 1.
+- **Prompt cache is effectively required** (concatenated knowledge ≈ 40k tokens). Order the prompt as: (1) system instructions + **persona** + concatenated knowledge — stable per playthrough, **this is the cache target, keep it at the very front**; (2) current `state`; (3) session conversation. Don't reorder 1. Persona belongs in block 1 (it changes rarely; a per-playthrough cache entry is fine).
 - Knowledge filenames must be **ASCII** (hyphenated). Japanese filenames break across WSL2/Windows/Git encoding normalization. The Japanese title is kept as the first-line `# heading` inside each file — the AI identifies content by heading.
 
 ## Content correctness constraint
@@ -61,15 +65,18 @@ All game content must match the **Famicom (FC) 1988** version — never mix in S
 - **AI 応答はキャッシュさせない。** Route Handler の `POST` は既定で動的だが、意図を明示するため `export const dynamic = 'force-dynamic'` を付け、外部 fetch を使う箇所では `cache: 'no-store'` を指定する。逆に **`knowledge/` の連結結果はリクエストをまたいでメモリにキャッシュ**する（Next のキャッシュ機構ではなくモジュールスコープの変数で）。
 - **環境変数はサーバー専用に保つ。** `ANTHROPIC_API_KEY` などの秘密情報に `NEXT_PUBLIC_` を付けない（付けるとクライアントバンドルに焼き込まれる）。秘密値は Route Handler / Server Component 内の `process.env` でのみ参照する。
 - **Server Components を既定にし、`"use client"` は最小限に。** クライアント側 JS とバンドルサイズを抑えるため、`"use client"` は状態やイベントを持つ末端コンポーネントだけに付ける。MVP のチャット入力欄まわりが該当する。
-- **ストリーミングと `loading.tsx` / `<Suspense>` は MVP では任意。** 凝った UI 演出は Phase 2 スコープ（§4.2 の「やらないこと」）。チャット応答のストリーミングを入れる場合のみ Route Handler から `ReadableStream` / Anthropic の stream を返す。
+- **チャット応答はストリーミング実装済み（Phase 2）。** `/api/chat` は `anthropic.messages.stream(...)` のテキスト差分を `ReadableStream`（`text/plain; charset=utf-8`）でそのまま返し、クライアントは `res.body.getReader()` ＋ `TextDecoder({ stream: true })` で1文字ずつ表示する（マルチバイト境界は TextDecoder が吸収）。`loading.tsx` / `<Suspense>` は引き続き任意。
+- **音声は Web Speech API（ブラウザ標準・クライアントのみ）。** STT/TTS はサーバを介さず `src/hooks/useSpeech.ts` に閉じる。型は標準 lib に無いため `src/types/speech.d.ts` で最小宣言。対応可否は `useEffect` 後に判定（SSR ハイドレーション不一致回避）。Chrome/Edge 前提、非対応時は無効表示。
 
 ## Scope discipline
 
-Do **not** pre-implement Phase 2 items (retrieval/RAG, voice STT/TTS, AI persona UI, YouTube log export, multi-game support, conversation history persistence, auth, responsive/animation polish). See REQUIREMENTS.md §4.2 and §9. Build the MVP; new requirements get cut separately once it works. Errors should surface on screen rather than being swallowed — the developer debugs them directly.
+**Still out of scope** — do not implement without a fresh request: **retrieval/RAG / embeddings** (knowledge stays whole-prompt injected) and **multi-game support / knowledge-swap UI** (DQ3-FC only). Also unchanged: no auth/multi-tenancy, no deployment.
+
+Already shipped (Phase 2, no longer "やらないこと"): voice STT/TTS, AI persona, YouTube log export, conversation-history persistence, response streaming. New scope beyond the above gets cut as a fresh requirement. Errors should surface on screen rather than being swallowed — the developer debugs them directly.
 
 ## Development tickets & Todo convention
 
-Implementation work is split into numbered tickets under **`docs/`** (`docs/00-overview.md` is the index and recommended build order). Read the relevant ticket before implementing that feature; tickets reference the authoritative `REQUIREMENTS.md` sections.
+Implementation work is split into numbered tickets under **`docs/`** (`docs/00-overview.md` is the index and recommended build order). Phase 1 is `docs/01-08`; Phase 2 is `docs/09-14` (overview in `docs/09-phase2-overview.md`). Read the relevant ticket before implementing that feature; tickets reference the authoritative `REQUIREMENTS.md` sections.
 
 Each ticket also tracks its own Todo list. The convention:
 
