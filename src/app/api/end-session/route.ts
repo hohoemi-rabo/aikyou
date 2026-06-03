@@ -73,6 +73,8 @@ export async function POST(req: Request) {
     "前回の状態と今回の会話をもとに、今回の進展を反映した『新しい状態』を出力します。" +
     "前回と同じJSON構造（party/location/progress/next_goals/notes など）を保ち、" +
     "分かった範囲で更新してください。" +
+    "progress と notes は、入れ子のオブジェクトにせず、日本語の短い文章（文字列）で書くこと。" +
+    "location は地名の文字列、next_goals は短い日本語文字列の配列にすること。" +
     "出力はJSONのみ。前置き・説明・コードフェンスは一切付けないこと。";
 
   const userContent =

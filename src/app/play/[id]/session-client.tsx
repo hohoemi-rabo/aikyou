@@ -178,6 +178,83 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
   );
 }
 
+/**
+ * state は緩いスキーマ（AI が文字列のはずの欄をオブジェクトや配列で返すことがある）。
+ * 何が来ても React の子として描画できるよう、読める文字列へ安全に変換する。
+ * （主にパーティ名など、1行に収めたい箇所で使う）
+ */
+function toText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return value.map(toText).filter(Boolean).join("、");
+  return Object.entries(value as Record<string, unknown>)
+    .map(([k, v]) => `${humanizeKey(k)}: ${toText(v)}`)
+    .join(" / ");
+}
+
+/** AI が付けがちな英語キーを、読みやすい日本語ラベルに変換する。 */
+const KEY_LABELS: Record<string, string> = {
+  story_stage: "物語の段階",
+  progress: "進行",
+  party_planning: "パーティ編成",
+  party: "パーティ",
+  equipment_status: "装備状況",
+  equipment: "装備",
+  location: "現在地",
+  level: "レベル",
+  gold: "所持金",
+  status: "状況",
+  notes: "メモ",
+  goal: "目標",
+  goals: "目標",
+  next_goals: "次の目標",
+};
+
+function humanizeKey(key: string): string {
+  return KEY_LABELS[key] ?? key.replace(/_/g, " ");
+}
+
+/** 空（null / 空文字 / 空配列 / 空オブジェクト）かどうか。 */
+function isEmptyValue(value: unknown): boolean {
+  if (value == null || value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * どんな形の値でも見やすく描画する。
+ * オブジェクトはキーを日本語ラベル化した「ラベル：値」のリストにする。
+ */
+function RenderValue({ value }: { value: unknown }) {
+  if (isEmptyValue(value)) return "—";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return <span className="whitespace-pre-wrap">{String(value)}</span>;
+  }
+  if (Array.isArray(value)) {
+    return (
+      <ul className="list-inside list-disc">
+        {value.map((v, i) => (
+          <li key={i}>
+            <RenderValue value={v} />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <ul className="space-y-1">
+      {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
+        <li key={k}>
+          <span className="text-slate-400">{humanizeKey(k)}：</span>
+          <RenderValue value={v} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function Synopsis({ state }: { state: PlaythroughState }) {
   const party = Array.isArray(state.party) ? state.party : [];
   const goals = Array.isArray(state.next_goals) ? state.next_goals : [];
@@ -193,8 +270,8 @@ function Synopsis({ state }: { state: PlaythroughState }) {
             <ul className="list-inside list-disc">
               {party.map((m, i) => (
                 <li key={i}>
-                  {m.name ?? "（名前未設定）"}
-                  {m.job ? `／${m.job}` : ""}
+                  {toText(m.name) || "（名前未設定）"}
+                  {m.job ? `／${toText(m.job)}` : ""}
                   {typeof m.level === "number" ? `／Lv.${m.level}` : ""}
                 </li>
               ))}
@@ -204,12 +281,14 @@ function Synopsis({ state }: { state: PlaythroughState }) {
       </div>
       <div>
         <dt className="font-medium text-slate-400">現在地</dt>
-        <dd>{state.location || "（未設定）"}</dd>
+        <dd>{isEmptyValue(state.location) ? "（未設定）" : <RenderValue value={state.location} />}</dd>
       </div>
-      {state.progress && (
+      {!isEmptyValue(state.progress) && (
         <div>
           <dt className="font-medium text-slate-400">これまでの進行</dt>
-          <dd>{state.progress}</dd>
+          <dd>
+            <RenderValue value={state.progress} />
+          </dd>
         </div>
       )}
       <div>
@@ -220,16 +299,20 @@ function Synopsis({ state }: { state: PlaythroughState }) {
           ) : (
             <ul className="list-inside list-disc">
               {goals.map((g, i) => (
-                <li key={i}>{g}</li>
+                <li key={i}>
+                  <RenderValue value={g} />
+                </li>
               ))}
             </ul>
           )}
         </dd>
       </div>
-      {state.notes && (
+      {!isEmptyValue(state.notes) && (
         <div>
           <dt className="font-medium text-slate-400">メモ</dt>
-          <dd>{state.notes}</dd>
+          <dd>
+            <RenderValue value={state.notes} />
+          </dd>
         </div>
       )}
     </dl>

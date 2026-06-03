@@ -87,7 +87,10 @@ export default async function Home() {
                   <span className="min-w-0">
                     <span className="block truncate font-medium text-slate-100">{p.title}</span>
                     <span className="block truncate text-sm text-slate-400">
-                      {p.game_version} ／ {p.state?.location || "現在地未設定"}
+                      {p.game_version} ／{" "}
+                      {typeof p.state?.location === "string" && p.state.location
+                        ? p.state.location
+                        : "現在地未設定"}
                     </span>
                   </span>
                   <time className="shrink-0 text-xs text-slate-500">
