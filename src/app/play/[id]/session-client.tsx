@@ -3,16 +3,25 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ChatMessage } from "@/types/chat";
-import type { PlaythroughState } from "@/types/playthrough";
+import type { PlaythroughState, Persona } from "@/types/playthrough";
+import { updatePersona } from "@/app/actions";
+import { useSpeech } from "@/hooks/useSpeech";
 
 interface Props {
   id: string;
   title: string;
   gameVersion: string;
   initialState: PlaythroughState;
+  initialPersona: Persona;
 }
 
-export default function SessionClient({ id, title, gameVersion, initialState }: Props) {
+export default function SessionClient({
+  id,
+  title,
+  gameVersion,
+  initialState,
+  initialPersona,
+}: Props) {
   // 会話履歴はこのセッション中だけクライアントのメモリに保持（リロードで消えてよい）。
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -21,11 +30,27 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
   const [ending, setEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ペルソナ編集
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const [persona, setPersona] = useState<Persona>(initialPersona);
+  const [savingPersona, setSavingPersona] = useState(false);
+
+  // 音声（読み上げ ON/OFF）
+  const [voiceOutput, setVoiceOutput] = useState(false);
+  const { sttSupported, ttsSupported, listening, startListening, stopListening, speak, cancelSpeak } =
+    useSpeech();
+
+  // 冒険ログ出力
+  const [exporting, setExporting] = useState(false);
+  const [exportLog, setExportLog] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   async function send() {
     const text = input.trim();
     if (!text || sending) return;
 
     setError(null);
+    cancelSpeak();
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
@@ -58,6 +83,9 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
         acc += decoder.decode(value, { stream: true });
         setMessages([...next, { role: "assistant", content: acc }]);
       }
+
+      // 読み上げ ON なら、応答が出そろってから喋らせる。
+      if (voiceOutput && acc) speak(acc);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -89,25 +117,138 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
     }
   }
 
+  async function savePersona() {
+    setSavingPersona(true);
+    setError(null);
+    try {
+      await updatePersona(id, persona);
+      setPersonaOpen(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingPersona(false);
+    }
+  }
+
+  function toggleMic() {
+    if (listening) {
+      stopListening();
+      return;
+    }
+    startListening((text) => setInput((prev) => (prev ? `${prev} ${text}` : text)));
+  }
+
+  async function generateLog() {
+    if (exporting || messages.length === 0) return;
+    setExporting(true);
+    setError(null);
+    setCopied(false);
+    try {
+      const res = await fetch("/api/export-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ playthroughId: id, messages }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setExportLog(data.log as string);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function copyLog() {
+    if (!exportLog) return;
+    try {
+      await navigator.clipboard.writeText(exportLog);
+      setCopied(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  const personaLabel = persona.name ? `相棒：${persona.name}` : "相棒の設定";
+
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-8">
       <div className="flex items-center justify-between">
         <Link href="/" className="text-sm text-slate-400 hover:text-slate-200 hover:underline">
           ← 一覧へ戻る
         </Link>
-        <button
-          onClick={endSession}
-          disabled={ending}
-          className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-        >
-          {ending ? "保存中…" : "セッション終了して保存"}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/play/${id}/log`}
+            className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+          >
+            ふりかえり
+          </Link>
+          <button
+            onClick={endSession}
+            disabled={ending}
+            className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {ending ? "保存中…" : "セッション終了して保存"}
+          </button>
+        </div>
       </div>
 
-      <header>
-        <h1 className="text-xl font-bold text-slate-100">{title}</h1>
-        <p className="text-sm text-slate-400">{gameVersion}</p>
+      <header className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">{title}</h1>
+          <p className="text-sm text-slate-400">{gameVersion}</p>
+        </div>
+        <button
+          onClick={() => setPersonaOpen((v) => !v)}
+          className="shrink-0 rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+        >
+          {personaLabel}
+        </button>
       </header>
+
+      {/* 相棒（ペルソナ）の設定 */}
+      {personaOpen && (
+        <section className="space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
+          <h2 className="font-semibold text-slate-100">相棒の設定</h2>
+          <div className="flex flex-col gap-1">
+            <label className="text-slate-400">名前</label>
+            <input
+              value={persona.name ?? ""}
+              onChange={(e) => setPersona({ ...persona, name: e.target.value })}
+              placeholder="例: ナビ"
+              className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-slate-400">口調・話し方</label>
+            <input
+              value={persona.tone ?? ""}
+              onChange={(e) => setPersona({ ...persona, tone: e.target.value })}
+              placeholder="例: 明るくフランクなタメ口"
+              className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-slate-400">性格・キャラクター</label>
+            <textarea
+              value={persona.personality ?? ""}
+              onChange={(e) => setPersona({ ...persona, personality: e.target.value })}
+              placeholder="例: 面倒見がよく、たまにダジャレを言う"
+              rows={2}
+              className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
+            />
+          </div>
+          <button
+            onClick={savePersona}
+            disabled={savingPersona}
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          >
+            {savingPersona ? "保存中…" : "保存"}
+          </button>
+        </section>
+      )}
 
       {/* 前回までのあらすじ */}
       <section className="rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
@@ -152,6 +293,18 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
         </div>
 
         <div className="flex gap-2">
+          <button
+            onClick={toggleMic}
+            disabled={!sttSupported || sending}
+            title={sttSupported ? "音声入力" : "このブラウザは音声入力に未対応です"}
+            className={`rounded border px-3 py-2 text-sm disabled:opacity-40 ${
+              listening
+                ? "border-red-500 bg-red-600 text-white"
+                : "border-slate-600 text-slate-200 hover:bg-slate-700"
+            }`}
+          >
+            {listening ? "● 録音中" : "🎤"}
+          </button>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -173,6 +326,51 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
             送信
           </button>
         </div>
+
+        <div className="flex items-center gap-3 text-xs text-slate-400">
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={voiceOutput}
+              disabled={!ttsSupported}
+              onChange={(e) => {
+                setVoiceOutput(e.target.checked);
+                if (!e.target.checked) cancelSpeak();
+              }}
+            />
+            相棒の返事を読み上げる
+          </label>
+          {!sttSupported && <span>※音声入力はChrome/Edgeで使えます</span>}
+        </div>
+      </section>
+
+      {/* 冒険ログ（YouTube用）出力 */}
+      <section className="space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-semibold text-slate-100">動画用ログ</h2>
+          <button
+            onClick={generateLog}
+            disabled={exporting || messages.length === 0}
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+          >
+            {exporting ? "生成中…" : "動画用ログを生成"}
+          </button>
+        </div>
+        {exportLog && (
+          <div className="space-y-2">
+            <div className="flex justify-end">
+              <button
+                onClick={copyLog}
+                className="rounded border border-slate-600 px-3 py-1 text-xs text-slate-200 hover:bg-slate-700"
+              >
+                {copied ? "コピーしました" : "コピー"}
+              </button>
+            </div>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded border border-slate-700 bg-slate-900 p-3 text-sm text-slate-100">
+              {exportLog}
+            </pre>
+          </div>
+        )}
       </section>
     </main>
   );

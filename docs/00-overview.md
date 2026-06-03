@@ -23,6 +23,19 @@
 | 07 | [プレイスルー一覧・新規作成 (`/`)](./07-playthrough-list.md) | 一覧表示・新規作成 |
 | 08 | [セッション画面 (`/play/[id]`)](./08-session-screen.md) | あらすじ表示＋チャット UI |
 
+## フェーズ2（実装済み）
+
+MVP 完成後に追加した、動画制作向けの4機能。索引と方針は [09-phase2-overview](./09-phase2-overview.md)。
+
+| No. | チケット | 概要 |
+|-----|----------|------|
+| 09 | [フェーズ2 概要](./09-phase2-overview.md) | 方針・スコープ・フェーズ1からの変更点 |
+| 10 | [DB・型](./10-db-persona-messages.md) | `persona` 列・`messages` テーブル |
+| 11 | [AIペルソナ](./11-persona.md) | 名前・口調・性格を設定し応答に反映 |
+| 12 | [会話履歴＋ふりかえり](./12-history-and-log-view.md) | `messages` 永続化・`/play/[id]/log` |
+| 13 | [冒険ログ出力](./13-export-log.md) | 動画概要欄/字幕用テキストの生成・コピー |
+| 14 | [音声 STT/TTS](./14-voice.md) | Web Speech API（ブラウザ標準） |
+
 ## 全体の前提（CLAUDE.md / REQUIREMENTS.md より）
 
 - **自分専用ツール。** 認証なし・マルチユーザーなし・デプロイなし（ローカルで動けばよい）。

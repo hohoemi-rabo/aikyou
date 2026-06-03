@@ -35,9 +35,9 @@ export async function POST(req: Request) {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("playthroughs")
-    .select("title, game_version, state")
+    .select("title, game_version, state, persona")
     .eq("id", playthroughId)
-    .single<Pick<Playthrough, "title" | "game_version" | "state">>();
+    .single<Pick<Playthrough, "title" | "game_version" | "state" | "persona">>();
 
   if (error || !data) {
     return NextResponse.json(
@@ -46,11 +46,12 @@ export async function POST(req: Request) {
     );
   }
 
-  // システムプロンプト（不変ナレッジ＋現在 state）を組み立てて Claude に投げる。
+  // システムプロンプト（不変ナレッジ＋ペルソナ＋現在 state）を組み立てて Claude に投げる。
   const system = await buildSystemBlocks({
     title: data.title,
     game_version: data.game_version,
     state: data.state,
+    persona: data.persona,
   });
 
   const anthropic = getAnthropic();
@@ -61,22 +62,43 @@ export async function POST(req: Request) {
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   });
 
+  // 今回のユーザー発言（履歴の末尾）。応答完了後に DB へ保存する。
+  const lastUser = messages[messages.length - 1];
+
   // テキスト差分を逐次クライアントへ流す（1文字ずつ表示するため）。
   const encoder = new TextEncoder();
   const responseStream = new ReadableStream<Uint8Array>({
     async start(controller) {
+      let full = "";
       try {
         for await (const event of claudeStream) {
           if (
             event.type === "content_block_delta" &&
             event.delta.type === "text_delta"
           ) {
+            full += event.delta.text;
             controller.enqueue(encoder.encode(event.delta.text));
           }
         }
         controller.close();
       } catch (err) {
         controller.error(err);
+        return;
+      }
+
+      // ふりかえり用に会話を永続化。失敗してもチャット応答は成立させる
+      // （履歴保存はベストエフォート。継続性は state が担うため致命的でない）。
+      try {
+        const rows = [
+          { playthrough_id: playthroughId, role: lastUser.role, content: lastUser.content },
+          { playthrough_id: playthroughId, role: "assistant", content: full },
+        ];
+        const { error: insertError } = await supabase.from("messages").insert(rows);
+        if (insertError) {
+          console.error("[chat] 会話履歴の保存に失敗:", insertError.message);
+        }
+      } catch (e) {
+        console.error("[chat] 会話履歴の保存中に例外:", e);
       }
     },
   });

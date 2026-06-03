@@ -5,7 +5,7 @@ import type { Playthrough } from "@/types/playthrough";
 
 export const dynamic = "force-dynamic";
 
-type Row = Pick<Playthrough, "id" | "title" | "game_version" | "state">;
+type Row = Pick<Playthrough, "id" | "title" | "game_version" | "state" | "persona">;
 
 export default async function PlayPage({
   params,
@@ -17,7 +17,7 @@ export default async function PlayPage({
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from("playthroughs")
-    .select("id, title, game_version, state")
+    .select("id, title, game_version, state, persona")
     .eq("id", id)
     .single<Row>();
 
@@ -40,6 +40,7 @@ export default async function PlayPage({
       title={data.title}
       gameVersion={data.game_version}
       initialState={data.state}
+      initialPersona={data.persona ?? {}}
     />
   );
 }

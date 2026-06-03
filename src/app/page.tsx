@@ -61,6 +61,30 @@ export default async function Home() {
             className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
           />
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col gap-1">
+            <label htmlFor="persona_name" className="text-sm text-slate-300">
+              相棒の名前（任意）
+            </label>
+            <input
+              id="persona_name"
+              name="persona_name"
+              placeholder="例: ナビ"
+              className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="persona_tone" className="text-sm text-slate-300">
+              口調（任意）
+            </label>
+            <input
+              id="persona_tone"
+              name="persona_tone"
+              placeholder="例: 明るくフランクなタメ口"
+              className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
+            />
+          </div>
+        </div>
         <button
           type="submit"
           className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"

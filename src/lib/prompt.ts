@@ -1,6 +1,20 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import type { PlaythroughState } from "@/types/playthrough";
+import type { PlaythroughState, Persona } from "@/types/playthrough";
 import { loadKnowledge } from "@/lib/knowledge";
+
+/**
+ * ペルソナ（名前・口調・性格）をシステム指示に差し込む文章を作る。
+ * 未設定なら空文字を返し、既定の「相棒」挙動のままにする。
+ */
+export function formatPersona(persona: Persona | undefined): string {
+  if (!persona) return "";
+  const lines: string[] = [];
+  if (persona.name) lines.push(`- あなたの名前は「${persona.name}」。一人称や呼ばれ方もこれに合わせる。`);
+  if (persona.tone) lines.push(`- 口調・話し方：${persona.tone}`);
+  if (persona.personality) lines.push(`- 性格・キャラクター：${persona.personality}`);
+  if (lines.length === 0) return "";
+  return `\n【あなた（相棒）のキャラクター設定】\n${lines.join("\n")}\n`;
+}
 
 /**
  * state を人が読める文字列に整形する（システムプロンプトの「現在の状況」欄や
@@ -50,6 +64,7 @@ interface BuildSystemParams {
   title: string;
   game_version: string;
   state: PlaythroughState;
+  persona?: Persona;
 }
 
 /**
@@ -65,11 +80,13 @@ export async function buildSystemBlocks({
   title,
   game_version,
   state,
+  persona,
 }: BuildSystemParams): Promise<Anthropic.TextBlockParam[]> {
   const knowledge = await loadKnowledge();
+  const personaText = formatPersona(persona);
 
   const instructions = `あなたは「${title}（${game_version}）」を一緒に遊ぶ、少し詳しい先輩ゲーマー（相棒）です。
-
+${personaText}
 【絶対のルール】
 - 必ず「${game_version}」の仕様で答えること。他の版（SFC/GBC/スマホ/HD-2Dリメイク等）の情報を混ぜないこと。職業・呪文・ダンジョン構成は版で異なるため、ここを間違えない。
 - 答えを一方的に全部言うのではなく、会話相手として、聞かれたことに的確に答える。
