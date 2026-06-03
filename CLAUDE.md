@@ -67,6 +67,18 @@ All game content must match the **Famicom (FC) 1988** version — never mix in S
 
 Do **not** pre-implement Phase 2 items (retrieval/RAG, voice STT/TTS, AI persona UI, YouTube log export, multi-game support, conversation history persistence, auth, responsive/animation polish). See REQUIREMENTS.md §4.2 and §9. Build the MVP; new requirements get cut separately once it works. Errors should surface on screen rather than being swallowed — the developer debugs them directly.
 
+## Development tickets & Todo convention
+
+Implementation work is split into numbered tickets under **`docs/`** (`docs/00-overview.md` is the index and recommended build order). Read the relevant ticket before implementing that feature; tickets reference the authoritative `REQUIREMENTS.md` sections.
+
+Each ticket also tracks its own Todo list. The convention:
+
+- Open items are written as `- [ ]`.
+- When an item is **done, rewrite `- [ ]` as `- [×]`** (full-width `×`, not `- [x]`).
+- A ticket is complete once all its Todos are `- [×]`.
+
+Keep these checkboxes up to date as work progresses — they are the single source of truth for what's left.
+
 ## Notes
 
 - `.mcp.json` is gitignored (it holds local MCP server config / secrets) — do not commit it.
