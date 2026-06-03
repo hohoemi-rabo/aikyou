@@ -1,0 +1,90 @@
+import type Anthropic from "@anthropic-ai/sdk";
+import type { PlaythroughState } from "@/types/playthrough";
+import { loadKnowledge } from "@/lib/knowledge";
+
+/**
+ * state を人が読める文字列に整形する（システムプロンプトの「現在の状況」欄や
+ * 画面のあらすじ表示で使う）。スキーマは緩いので、欠けていても落ちないようにする。
+ */
+export function formatState(state: PlaythroughState): string {
+  const lines: string[] = [];
+
+  const party = Array.isArray(state.party) ? state.party : [];
+  if (party.length > 0) {
+    lines.push("【パーティ】");
+    for (const m of party) {
+      const job = m.job ? `／${m.job}` : "";
+      const level = typeof m.level === "number" ? `／Lv.${m.level}` : "";
+      lines.push(`- ${m.name ?? "（名前未設定）"}${job}${level}`);
+    }
+  } else {
+    lines.push("【パーティ】まだ編成されていません。");
+  }
+
+  lines.push("");
+  lines.push(`【現在地】${state.location || "（未設定）"}`);
+
+  if (state.progress) {
+    lines.push("");
+    lines.push(`【これまでの進行】${state.progress}`);
+  }
+
+  const goals = Array.isArray(state.next_goals) ? state.next_goals : [];
+  lines.push("");
+  if (goals.length > 0) {
+    lines.push("【次の目標】");
+    for (const g of goals) lines.push(`- ${g}`);
+  } else {
+    lines.push("【次の目標】（未設定）");
+  }
+
+  if (state.notes) {
+    lines.push("");
+    lines.push(`【メモ】${state.notes}`);
+  }
+
+  return lines.join("\n");
+}
+
+interface BuildSystemParams {
+  title: string;
+  game_version: string;
+  state: PlaythroughState;
+}
+
+/**
+ * Claude に渡す system ブロック配列を組み立てる。
+ *
+ * プロンプトキャッシュを効かせるため順序を固定する：
+ *  1. システム指示 ＋ 連結ナレッジ（毎回不変）← cache_control: ephemeral を付与
+ *  2. 現在の state（毎セッション変わる）← キャッシュ対象外
+ *
+ * 会話履歴は messages 側で渡す（ここには含めない）。
+ */
+export async function buildSystemBlocks({
+  title,
+  game_version,
+  state,
+}: BuildSystemParams): Promise<Anthropic.TextBlockParam[]> {
+  const knowledge = await loadKnowledge();
+
+  const instructions = `あなたは「${title}（${game_version}）」を一緒に遊ぶ、少し詳しい先輩ゲーマー（相棒）です。
+
+【絶対のルール】
+- 必ず「${game_version}」の仕様で答えること。他の版（SFC/GBC/スマホ/HD-2Dリメイク等）の情報を混ぜないこと。職業・呪文・ダンジョン構成は版で異なるため、ここを間違えない。
+- 答えを一方的に全部言うのではなく、会話相手として、聞かれたことに的確に答える。
+- 「⚠️要確認」と記された情報は未確定なので、事実として断定しない。
+
+【攻略の参考知識（この版の情報）】
+${knowledge}`;
+
+  return [
+    // 1. 不変部（システム指示＋ナレッジ）。先頭に固定し、ここをキャッシュ対象にする。
+    { type: "text", text: instructions, cache_control: { type: "ephemeral" } },
+    // 2. 可変部（現在の状況）。キャッシュ対象外。
+    {
+      type: "text",
+      text: `【現在の冒険の状況】\n${formatState(state)}`,
+    },
+  ];
+}

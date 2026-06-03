@@ -17,12 +17,12 @@
 
 ## Todo
 
-- [ ] `@anthropic-ai/sdk` と `@supabase/supabase-js` を `npm install` で追加（lockファイルもコミット）
-- [ ] `.env.example` を作成：`ANTHROPIC_API_KEY` / `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY`（または anon key）を記載
-- [ ] `.env.local` を用意し、`.gitignore` に含まれていることを確認（秘密値はコミットしない）
-- [ ] `src/lib/anthropic.ts`：`Anthropic` クライアントを生成し、`MODEL_CHAT = 'claude-haiku-4-5-20251001'`、`MODEL_END_SESSION` 定数（既定 Haiku、必要時 Sonnet）をエクスポート
-- [ ] `src/lib/supabase.ts`：`process.env` から URL/Key を読むサーバ専用クライアントを生成（`NEXT_PUBLIC_` を付けない）
-- [ ] 秘密情報がクライアントバンドルに混入しないこと（クライアントコンポーネントから import しない）を確認
+- [×] `@anthropic-ai/sdk` と `@supabase/supabase-js` を `npm install` で追加（lockファイルもコミット）
+- [×] `.env.example` を作成：`ANTHROPIC_API_KEY` / `SUPABASE_URL` / `SUPABASE_ANON_KEY` を記載
+- [×] `.env.local` を用意し、`.gitignore` に含まれていることを確認（秘密値はコミットしない）
+- [×] `src/lib/anthropic.ts`：`Anthropic` クライアントを生成し、`MODEL_CHAT = 'claude-haiku-4-5-20251001'`、`MODEL_END_SESSION` 定数（既定 Haiku、必要時 Sonnet）をエクスポート
+- [×] `src/lib/supabase.ts`：`process.env` から URL/Key を読むサーバ専用クライアントを生成（`NEXT_PUBLIC_` を付けない）
+- [×] 秘密情報がクライアントバンドルに混入しないこと（クライアントコンポーネントから import しない）を確認
 
 ## 完了条件
 
