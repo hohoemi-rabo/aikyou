@@ -38,9 +38,26 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
         cache: "no-store",
         body: JSON.stringify({ playthroughId: id, messages: next }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setMessages([...next, { role: "assistant", content: data.reply }]);
+
+      if (!res.ok) {
+        // エラー時は JSON で返る。
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
+      if (!res.body) throw new Error("応答ストリームを取得できませんでした。");
+
+      // 空の相棒メッセージを置いてから、届いた差分を1文字ずつ追記していく。
+      setMessages([...next, { role: "assistant", content: "" }]);
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        setMessages([...next, { role: "assistant", content: acc }]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -75,40 +92,40 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-8">
       <div className="flex items-center justify-between">
-        <Link href="/" className="text-sm text-gray-500 hover:underline">
+        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200 hover:underline">
           ← 一覧へ戻る
         </Link>
         <button
           onClick={endSession}
           disabled={ending}
-          className="rounded border px-3 py-1.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
         >
           {ending ? "保存中…" : "セッション終了して保存"}
         </button>
       </div>
 
       <header>
-        <h1 className="text-xl font-bold">{title}</h1>
-        <p className="text-sm text-gray-500">{gameVersion}</p>
+        <h1 className="text-xl font-bold text-slate-100">{title}</h1>
+        <p className="text-sm text-slate-400">{gameVersion}</p>
       </header>
 
       {/* 前回までのあらすじ */}
-      <section className="rounded-lg border bg-gray-50 p-4 text-sm">
-        <h2 className="mb-2 font-semibold">前回までのあらすじ</h2>
+      <section className="rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
+        <h2 className="mb-2 font-semibold text-slate-100">前回までのあらすじ</h2>
         <Synopsis state={state} />
       </section>
 
       {error && (
-        <p className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+        <p className="rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">
           {error}
         </p>
       )}
 
       {/* チャット */}
-      <section className="flex min-h-[40vh] flex-col gap-3 rounded-lg border p-4">
+      <section className="flex min-h-[40vh] flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="flex-1 space-y-3 overflow-y-auto">
           {messages.length === 0 ? (
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-slate-400">
               相棒に話しかけてみましょう。会話はこのセッション中だけ保持されます。
             </p>
           ) : (
@@ -121,7 +138,7 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
                   className={`inline-block whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
                     m.role === "user"
                       ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-900"
+                      : "bg-slate-700 text-slate-100"
                   }`}
                 >
                   {m.content}
@@ -129,7 +146,9 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
               </div>
             ))
           )}
-          {sending && <p className="text-sm text-gray-400">相棒が考え中…</p>}
+          {sending && messages[messages.length - 1]?.role === "user" && (
+            <p className="text-sm text-slate-400">相棒が考え中…</p>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -144,12 +163,12 @@ export default function SessionClient({ id, title, gameVersion, initialState }: 
             }}
             placeholder="メッセージを入力（Enterで送信）"
             disabled={sending}
-            className="flex-1 rounded border px-3 py-2 text-sm disabled:opacity-50"
+            className="flex-1 rounded border border-slate-600 bg-slate-900 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 disabled:opacity-50"
           />
           <button
             onClick={send}
             disabled={sending || input.trim() === ""}
-            className="rounded bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
           >
             送信
           </button>
@@ -166,7 +185,7 @@ function Synopsis({ state }: { state: PlaythroughState }) {
   return (
     <dl className="space-y-2">
       <div>
-        <dt className="font-medium text-gray-600">パーティ</dt>
+        <dt className="font-medium text-slate-400">パーティ</dt>
         <dd>
           {party.length === 0 ? (
             "まだ編成されていません"
@@ -184,17 +203,17 @@ function Synopsis({ state }: { state: PlaythroughState }) {
         </dd>
       </div>
       <div>
-        <dt className="font-medium text-gray-600">現在地</dt>
+        <dt className="font-medium text-slate-400">現在地</dt>
         <dd>{state.location || "（未設定）"}</dd>
       </div>
       {state.progress && (
         <div>
-          <dt className="font-medium text-gray-600">これまでの進行</dt>
+          <dt className="font-medium text-slate-400">これまでの進行</dt>
           <dd>{state.progress}</dd>
         </div>
       )}
       <div>
-        <dt className="font-medium text-gray-600">次の目標</dt>
+        <dt className="font-medium text-slate-400">次の目標</dt>
         <dd>
           {goals.length === 0 ? (
             "（未設定）"
@@ -209,7 +228,7 @@ function Synopsis({ state }: { state: PlaythroughState }) {
       </div>
       {state.notes && (
         <div>
-          <dt className="font-medium text-gray-600">メモ</dt>
+          <dt className="font-medium text-slate-400">メモ</dt>
           <dd>{state.notes}</dd>
         </div>
       )}

@@ -24,10 +24,10 @@ export default async function PlayPage({
   if (error || !data) {
     return (
       <main className="mx-auto max-w-3xl px-6 py-12">
-        <Link href="/" className="text-sm text-gray-500 hover:underline">
+        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200 hover:underline">
           ← 一覧へ戻る
         </Link>
-        <p className="mt-6 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+        <p className="mt-6 rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">
           プレイスルーを読み込めませんでした: {error?.message ?? id}
         </p>
       </main>

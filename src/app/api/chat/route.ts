@@ -54,16 +54,37 @@ export async function POST(req: Request) {
   });
 
   const anthropic = getAnthropic();
-  const response = await anthropic.messages.create({
+  const claudeStream = anthropic.messages.stream({
     model: MODEL_CHAT,
     max_tokens: 1024,
     system,
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
   });
 
-  const reply = response.content
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("");
+  // テキスト差分を逐次クライアントへ流す（1文字ずつ表示するため）。
+  const encoder = new TextEncoder();
+  const responseStream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const event of claudeStream) {
+          if (
+            event.type === "content_block_delta" &&
+            event.delta.type === "text_delta"
+          ) {
+            controller.enqueue(encoder.encode(event.delta.text));
+          }
+        }
+        controller.close();
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
 
-  return NextResponse.json({ reply });
+  return new Response(responseStream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+    },
+  });
 }

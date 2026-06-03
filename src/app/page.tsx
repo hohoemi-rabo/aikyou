@@ -20,22 +20,25 @@ export default async function Home() {
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-bold">あいきょう</h1>
-      <p className="mt-1 text-sm text-gray-500">
+      <h1 className="text-2xl font-bold text-slate-100">あいきょう</h1>
+      <p className="mt-1 text-sm text-slate-400">
         レトロゲーム実況の相棒AI — プレイスルーを選んで続きを遊ぶ
       </p>
 
       {error && (
-        <p className="mt-6 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+        <p className="mt-6 rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">
           一覧の取得に失敗しました: {error.message}
         </p>
       )}
 
       {/* 新規作成 */}
-      <form action={createPlaythrough} className="mt-8 space-y-3 rounded-lg border p-4">
-        <h2 className="font-semibold">新規プレイスルー</h2>
+      <form
+        action={createPlaythrough}
+        className="mt-8 space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4"
+      >
+        <h2 className="font-semibold text-slate-100">新規プレイスルー</h2>
         <div className="flex flex-col gap-1">
-          <label htmlFor="title" className="text-sm text-gray-600">
+          <label htmlFor="title" className="text-sm text-slate-300">
             ゲームタイトル
           </label>
           <input
@@ -43,11 +46,11 @@ export default async function Home() {
             name="title"
             required
             placeholder="ドラゴンクエスト3"
-            className="rounded border px-3 py-2"
+            className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
           />
         </div>
         <div className="flex flex-col gap-1">
-          <label htmlFor="game_version" className="text-sm text-gray-600">
+          <label htmlFor="game_version" className="text-sm text-slate-300">
             ゲームバージョン
           </label>
           <input
@@ -55,12 +58,12 @@ export default async function Home() {
             name="game_version"
             required
             defaultValue="ファミコン版(FC)"
-            className="rounded border px-3 py-2"
+            className="rounded border border-slate-600 bg-slate-900 px-3 py-2 text-slate-100 placeholder-slate-500"
           />
         </div>
         <button
           type="submit"
-          className="rounded bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500"
         >
           作成して始める
         </button>
@@ -68,26 +71,26 @@ export default async function Home() {
 
       {/* 一覧 */}
       <section className="mt-8">
-        <h2 className="font-semibold">プレイスルー一覧</h2>
+        <h2 className="font-semibold text-slate-100">プレイスルー一覧</h2>
         {playthroughs.length === 0 ? (
-          <p className="mt-3 text-sm text-gray-500">
+          <p className="mt-3 text-sm text-slate-400">
             まだありません。上のフォームから作成してください。
           </p>
         ) : (
-          <ul className="mt-3 divide-y rounded-lg border">
+          <ul className="mt-3 divide-y divide-slate-700 rounded-lg border border-slate-700 bg-slate-800">
             {playthroughs.map((p) => (
               <li key={p.id}>
                 <Link
                   href={`/play/${p.id}`}
-                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50"
+                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-slate-700"
                 >
                   <span className="min-w-0">
-                    <span className="block truncate font-medium">{p.title}</span>
-                    <span className="block truncate text-sm text-gray-500">
+                    <span className="block truncate font-medium text-slate-100">{p.title}</span>
+                    <span className="block truncate text-sm text-slate-400">
                       {p.game_version} ／ {p.state?.location || "現在地未設定"}
                     </span>
                   </span>
-                  <time className="shrink-0 text-xs text-gray-400">
+                  <time className="shrink-0 text-xs text-slate-500">
                     {new Date(p.updated_at).toLocaleString("ja-JP")}
                   </time>
                 </Link>

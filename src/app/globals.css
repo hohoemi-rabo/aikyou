@@ -2,16 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * UI は「青っぽいダーク」テーマ固定（OS 設定に依存しない）。
+ * 背景は青みのある濃紺（slate 系）、文字は明るいスレート。
+ * コンポーネント側も slate 系のダーク配色で統一する。
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  color-scheme: dark;
+  --background: #0f172a; /* slate-900 */
+  --foreground: #e2e8f0; /* slate-200 */
 }
 
 body {
