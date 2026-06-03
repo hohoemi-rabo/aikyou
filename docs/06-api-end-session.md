@@ -26,14 +26,14 @@
 
 ## Todo
 
-- [ ] `POST` を実装、`runtime='nodejs'` / `dynamic='force-dynamic'` を設定
-- [ ] `{ playthroughId, messages }` を受け取りバリデーション
-- [ ] DB から現在の `state` を取得
-- [ ] 「JSON のみ出力」指示のプロンプトで Claude に新 state を生成させる
-- [ ] 応答から ```json フェンスを除去 → `JSON.parse`
-- [ ] パース失敗時：旧 state を維持し、エラー内容を返して画面に出す（握りつぶさない）
-- [ ] パース成功時：`state` と `updated_at` を DB 更新し、新 state を返す
-- [ ] 必須キー（`party`/`location`/`next_goals`）の欠落を最低限チェック（緩く・落ちない程度に）
+- [×] `POST` を実装、`runtime='nodejs'` / `dynamic='force-dynamic'` を設定
+- [×] `{ playthroughId, messages }` を受け取りバリデーション
+- [×] DB から現在の `state` を取得
+- [×] 「JSON のみ出力」指示のプロンプトで Claude に新 state を生成させる
+- [×] 応答から ```json フェンスを除去 → `JSON.parse`
+- [×] パース失敗時：旧 state を維持し、エラー内容を返して画面に出す（握りつぶさない）
+- [×] パース成功時：`state` と `updated_at` を DB 更新し、新 state を返す
+- [×] 必須キー（`party`/`location`/`next_goals`）の欠落を最低限チェック（緩く・落ちない程度に）
 
 ## 完了条件
 

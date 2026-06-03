@@ -28,12 +28,12 @@
 
 ## Todo
 
-- [ ] `/`（Server Component）で `playthroughs` を `updated_at` 降順取得し一覧表示（title / location / updated_at）
-- [ ] 各行から `/play/[id]` へのリンク
-- [ ] 新規作成フォーム（title・game_version 入力）を末端のクライアントコンポーネントで実装
-- [ ] 作成処理：`createInitialState()` で初期 state を作り insert → 作成した id の `/play/[id]` へ遷移
-- [ ] 一覧が空のときの表示を用意
-- [ ] エラーは画面に表示（握りつぶさない）
+- [×] `/`（Server Component）で `playthroughs` を `updated_at` 降順取得し一覧表示（title / location / updated_at）
+- [×] 各行から `/play/[id]` へのリンク
+- [×] 新規作成フォーム（title・game_version 入力）を末端のクライアントコンポーネントで実装
+- [×] 作成処理：`createInitialState()` で初期 state を作り insert → 作成した id の `/play/[id]` へ遷移
+- [×] 一覧が空のときの表示を用意
+- [×] エラーは画面に表示（握りつぶさない）
 
 ## 完了条件
 

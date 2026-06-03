@@ -1,103 +1,101 @@
-import Image from "next/image";
+import Link from "next/link";
+import { getSupabase } from "@/lib/supabase";
+import { createPlaythrough } from "./actions";
+import type { Playthrough } from "@/types/playthrough";
 
-export default function Home() {
+// 一覧は常に最新を表示する（キャッシュしない）。
+export const dynamic = "force-dynamic";
+
+type Row = Pick<Playthrough, "id" | "title" | "game_version" | "state" | "updated_at">;
+
+export default async function Home() {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("playthroughs")
+    .select("id, title, game_version, state, updated_at")
+    .order("updated_at", { ascending: false })
+    .returns<Row[]>();
+
+  const playthroughs = data ?? [];
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="mx-auto max-w-2xl px-6 py-12">
+      <h1 className="text-2xl font-bold">あいきょう</h1>
+      <p className="mt-1 text-sm text-gray-500">
+        レトロゲーム実況の相棒AI — プレイスルーを選んで続きを遊ぶ
+      </p>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {error && (
+        <p className="mt-6 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+          一覧の取得に失敗しました: {error.message}
+        </p>
+      )}
+
+      {/* 新規作成 */}
+      <form action={createPlaythrough} className="mt-8 space-y-3 rounded-lg border p-4">
+        <h2 className="font-semibold">新規プレイスルー</h2>
+        <div className="flex flex-col gap-1">
+          <label htmlFor="title" className="text-sm text-gray-600">
+            ゲームタイトル
+          </label>
+          <input
+            id="title"
+            name="title"
+            required
+            placeholder="ドラゴンクエスト3"
+            className="rounded border px-3 py-2"
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="game_version" className="text-sm text-gray-600">
+            ゲームバージョン
+          </label>
+          <input
+            id="game_version"
+            name="game_version"
+            required
+            defaultValue="ファミコン版(FC)"
+            className="rounded border px-3 py-2"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+        </div>
+        <button
+          type="submit"
+          className="rounded bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          作成して始める
+        </button>
+      </form>
+
+      {/* 一覧 */}
+      <section className="mt-8">
+        <h2 className="font-semibold">プレイスルー一覧</h2>
+        {playthroughs.length === 0 ? (
+          <p className="mt-3 text-sm text-gray-500">
+            まだありません。上のフォームから作成してください。
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y rounded-lg border">
+            {playthroughs.map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/play/${p.id}`}
+                  className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{p.title}</span>
+                    <span className="block truncate text-sm text-gray-500">
+                      {p.game_version} ／ {p.state?.location || "現在地未設定"}
+                    </span>
+                  </span>
+                  <time className="shrink-0 text-xs text-gray-400">
+                    {new Date(p.updated_at).toLocaleString("ja-JP")}
+                  </time>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </main>
   );
 }

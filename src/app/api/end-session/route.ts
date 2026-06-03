@@ -1,0 +1,138 @@
+import { NextResponse } from "next/server";
+import { getAnthropic, MODEL_END_SESSION } from "@/lib/anthropic";
+import { getSupabase } from "@/lib/supabase";
+import type { ChatMessage } from "@/types/chat";
+import type { Playthrough, PlaythroughState } from "@/types/playthrough";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+interface EndSessionRequest {
+  playthroughId?: string;
+  messages?: ChatMessage[];
+}
+
+/** ```json フェンスや前後の余計な文字を取り除いて JSON 本体だけにする。 */
+function stripJsonFences(text: string): string {
+  let t = text.trim();
+  // ```json ... ``` / ``` ... ``` を除去。
+  const fence = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+  if (fence) t = fence[1].trim();
+  // 念のため最初の { から最後の } までを抜き出す。
+  const first = t.indexOf("{");
+  const last = t.lastIndexOf("}");
+  if (first !== -1 && last !== -1 && last > first) {
+    t = t.slice(first, last + 1);
+  }
+  return t;
+}
+
+export async function POST(req: Request) {
+  let body: EndSessionRequest;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "リクエスト本文が不正です。" }, { status: 400 });
+  }
+
+  const { playthroughId, messages } = body;
+  if (!playthroughId || !Array.isArray(messages)) {
+    return NextResponse.json(
+      { error: "playthroughId と messages が必要です。" },
+      { status: 400 },
+    );
+  }
+
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from("playthroughs")
+    .select("state")
+    .eq("id", playthroughId)
+    .single<Pick<Playthrough, "state">>();
+
+  if (error || !data) {
+    return NextResponse.json(
+      { error: `プレイスルーが見つかりません: ${error?.message ?? playthroughId}` },
+      { status: 404 },
+    );
+  }
+
+  const oldState = data.state;
+
+  // 会話が空ならそのまま現状維持で返す（無駄に AI を呼ばない）。
+  if (messages.length === 0) {
+    return NextResponse.json({ state: oldState, updated: false });
+  }
+
+  const transcript = messages
+    .map((m) => `${m.role === "user" ? "プレイヤー" : "相棒"}: ${m.content}`)
+    .join("\n");
+
+  const system =
+    "あなたはRPGのプレイ状況を更新する記録係です。" +
+    "前回の状態と今回の会話をもとに、今回の進展を反映した『新しい状態』を出力します。" +
+    "前回と同じJSON構造（party/location/progress/next_goals/notes など）を保ち、" +
+    "分かった範囲で更新してください。" +
+    "出力はJSONのみ。前置き・説明・コードフェンスは一切付けないこと。";
+
+  const userContent =
+    `【前回までの状態】\n${JSON.stringify(oldState, null, 2)}\n\n` +
+    `【今回のプレイ会話】\n${transcript}`;
+
+  const anthropic = getAnthropic();
+  const response = await anthropic.messages.create({
+    model: MODEL_END_SESSION,
+    max_tokens: 2048,
+    system,
+    messages: [{ role: "user", content: userContent }],
+  });
+
+  const raw = response.content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("");
+
+  // 防御的パース：失敗時は旧 state を維持し、エラーを画面に出す。
+  let newState: PlaythroughState;
+  try {
+    newState = JSON.parse(stripJsonFences(raw)) as PlaythroughState;
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: `新しい状態のJSON解析に失敗しました（旧stateを維持）: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+        raw,
+        state: oldState,
+        updated: false,
+      },
+      { status: 502 },
+    );
+  }
+
+  // 必須キーの最低限チェック（緩く・落とさない）。
+  if (!Array.isArray(newState.party) || typeof newState.location !== "string") {
+    return NextResponse.json(
+      {
+        error: "生成された状態に必須キー（party/location）が不足しています（旧stateを維持）。",
+        raw,
+        state: oldState,
+        updated: false,
+      },
+      { status: 502 },
+    );
+  }
+
+  const { error: updateError } = await supabase
+    .from("playthroughs")
+    .update({ state: newState, updated_at: new Date().toISOString() })
+    .eq("id", playthroughId);
+
+  if (updateError) {
+    return NextResponse.json(
+      { error: `state の保存に失敗しました: ${updateError.message}`, state: oldState, updated: false },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ state: newState, updated: true });
+}

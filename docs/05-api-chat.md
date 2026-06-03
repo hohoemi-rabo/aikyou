@@ -27,13 +27,13 @@
 
 ## Todo
 
-- [ ] `src/app/api/chat/route.ts` に `POST` を実装、`runtime='nodejs'` / `dynamic='force-dynamic'` を設定
-- [ ] `{ playthroughId, messages }` を受け取り、入力をバリデーション（不足時は 400）
-- [ ] DB から該当 `playthrough`（`title`/`game_version`/`state`）を取得（無ければ 404）
-- [ ] 04 の関数で system ブロック（ナレッジ＋state、cache 付き）を構築
-- [ ] Haiku 4.5 で `messages.create`、`messages` を会話履歴として渡す
-- [ ] AI のテキスト応答を JSON で返す
-- [ ] エラーは握りつぶさず、ステータス＋メッセージで返す（画面で確認できるように）
+- [×] `src/app/api/chat/route.ts` に `POST` を実装、`runtime='nodejs'` / `dynamic='force-dynamic'` を設定
+- [×] `{ playthroughId, messages }` を受け取り、入力をバリデーション（不足時は 400）
+- [×] DB から該当 `playthrough`（`title`/`game_version`/`state`）を取得（無ければ 404）
+- [×] 04 の関数で system ブロック（ナレッジ＋state、cache 付き）を構築
+- [×] Haiku 4.5 で `messages.create`、`messages` を会話履歴として渡す
+- [×] AI のテキスト応答を JSON で返す
+- [×] エラーは握りつぶさず、ステータス＋メッセージで返す（画面で確認できるように）
 
 ## 完了条件
 
