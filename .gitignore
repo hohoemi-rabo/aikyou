@@ -36,6 +36,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# mcp (contains local/secret server config)
+.mcp.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
