@@ -66,7 +66,8 @@ All game content must match the **Famicom (FC) 1988** version — never mix in S
 - **環境変数はサーバー専用に保つ。** `ANTHROPIC_API_KEY` などの秘密情報に `NEXT_PUBLIC_` を付けない（付けるとクライアントバンドルに焼き込まれる）。秘密値は Route Handler / Server Component 内の `process.env` でのみ参照する。
 - **Server Components を既定にし、`"use client"` は最小限に。** クライアント側 JS とバンドルサイズを抑えるため、`"use client"` は状態やイベントを持つ末端コンポーネントだけに付ける。MVP のチャット入力欄まわりが該当する。
 - **チャット応答はストリーミング実装済み（Phase 2）。** `/api/chat` は `anthropic.messages.stream(...)` のテキスト差分を `ReadableStream`（`text/plain; charset=utf-8`）でそのまま返し、クライアントは `res.body.getReader()` ＋ `TextDecoder({ stream: true })` で1文字ずつ表示する（マルチバイト境界は TextDecoder が吸収）。`loading.tsx` / `<Suspense>` は引き続き任意。
-- **音声は Web Speech API（ブラウザ標準・クライアントのみ）。** STT/TTS はサーバを介さず `src/hooks/useSpeech.ts` に閉じる。型は標準 lib に無いため `src/types/speech.d.ts` で最小宣言。対応可否は `useEffect` 後に判定（SSR ハイドレーション不一致回避）。Chrome/Edge 前提、非対応時は無効表示。
+- **音声入力（STT）は Web Speech API（ブラウザ標準・クライアントのみ）。** `src/hooks/useSpeech.ts` に閉じる。型は標準 lib に無いため `src/types/speech.d.ts` で最小宣言。対応可否は `useEffect` 後に判定（SSR ハイドレーション不一致回避）。Chrome/Edge 前提、非対応時は無効表示。エラーは握りつぶさず `sttError` で画面表示。
+- **読み上げ（TTS）は Google Cloud Text-to-Speech（WaveNet）。** API キー（`GOOGLE_TTS_API_KEY`、サーバ専用）で `src/app/api/tts/route.ts` から REST 呼び出し（SDK 不使用・依存を増やさない）。クライアント側は `src/hooks/useTts.ts` が**文単位の逐次再生キュー**を持ち、チャットのストリーミング中に文末（。！？!?改行）が確定するたび `/api/tts` で mp3 を生成して順番に再生する。ボイスは `src/types/tts.ts` の日本語 WaveNet 一覧から画面で切替。WaveNet は月100万字まで無料枠。
 
 ## Scope discipline
 

@@ -6,6 +6,26 @@ import type { ChatMessage } from "@/types/chat";
 import type { PlaythroughState, Persona } from "@/types/playthrough";
 import { updatePersona } from "@/app/actions";
 import { useSpeech } from "@/hooks/useSpeech";
+import { useTts } from "@/hooks/useTts";
+import { TTS_VOICES } from "@/types/tts";
+
+/**
+ * ストリーミング中のバッファから「文末（。！？!?改行）まで確定した文」を切り出す。
+ * 残り（文末未確定の末尾）は rest として持ち越す。
+ */
+function takeSentences(buf: string): { sentences: string[]; rest: string } {
+  const sentences: string[] = [];
+  let start = 0;
+  for (let i = 0; i < buf.length; i++) {
+    const ch = buf[i];
+    if (ch === "。" || ch === "！" || ch === "？" || ch === "!" || ch === "?" || ch === "\n") {
+      const s = buf.slice(start, i + 1).trim();
+      if (s) sentences.push(s);
+      start = i + 1;
+    }
+  }
+  return { sentences, rest: buf.slice(start) };
+}
 
 interface Props {
   id: string;
@@ -35,10 +55,10 @@ export default function SessionClient({
   const [persona, setPersona] = useState<Persona>(initialPersona);
   const [savingPersona, setSavingPersona] = useState(false);
 
-  // 音声（読み上げ ON/OFF）
+  // 音声入力（STT）はブラウザ標準。出力（読み上げ）は Google TTS（useTts）。
   const [voiceOutput, setVoiceOutput] = useState(false);
-  const { sttSupported, ttsSupported, listening, sttError, startListening, stopListening, speak, cancelSpeak } =
-    useSpeech();
+  const { sttSupported, listening, sttError, startListening, stopListening } = useSpeech();
+  const { voice, setVoice, ttsError, enqueue, cancel: cancelTts } = useTts();
 
   // 冒険ログ出力
   const [exporting, setExporting] = useState(false);
@@ -50,7 +70,7 @@ export default function SessionClient({
     if (!text || sending) return;
 
     setError(null);
-    cancelSpeak();
+    cancelTts();
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     setInput("");
@@ -77,15 +97,25 @@ export default function SessionClient({
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let acc = "";
+      let ttsBuf = ""; // 読み上げ用：まだキュー投入していない末尾。
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        acc += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        acc += chunk;
         setMessages([...next, { role: "assistant", content: acc }]);
+
+        // 読み上げ ON なら、文末が確定するたびに文単位で逐次再生キューへ。
+        if (voiceOutput) {
+          ttsBuf += chunk;
+          const { sentences, rest } = takeSentences(ttsBuf);
+          sentences.forEach((s) => enqueue(s));
+          ttsBuf = rest;
+        }
       }
 
-      // 読み上げ ON なら、応答が出そろってから喋らせる。
-      if (voiceOutput && acc) speak(acc);
+      // 最後に残った文末未確定ぶんも読み上げる。
+      if (voiceOutput && ttsBuf.trim()) enqueue(ttsBuf.trim());
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -327,25 +357,43 @@ export default function SessionClient({
           </button>
         </div>
 
-        <div className="flex items-center gap-3 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
               checked={voiceOutput}
-              disabled={!ttsSupported}
               onChange={(e) => {
                 setVoiceOutput(e.target.checked);
-                if (!e.target.checked) cancelSpeak();
+                if (!e.target.checked) cancelTts();
               }}
             />
             相棒の返事を読み上げる
           </label>
+
+          <label className="flex items-center gap-1.5">
+            <span>声</span>
+            <select
+              value={voice}
+              onChange={(e) => {
+                setVoice(e.target.value);
+                cancelTts(); // 切替時は再生中の旧ボイスを止める。
+              }}
+              className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100"
+            >
+              {TTS_VOICES.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           {!sttSupported && <span>※音声入力はChrome/Edgeで使えます</span>}
         </div>
 
-        {sttError && (
+        {(sttError || ttsError) && (
           <p className="rounded border border-amber-800 bg-amber-950 p-2 text-xs text-amber-300">
-            {sttError}
+            {sttError ?? ttsError}
           </p>
         )}
       </section>
