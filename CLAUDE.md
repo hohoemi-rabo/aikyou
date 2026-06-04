@@ -21,10 +21,10 @@ No test runner is configured yet. Deployment is out of scope — this only needs
 
 ## Stack
 
-Next.js 15 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v3 · Supabase (`@supabase/...`) · Anthropic SDK (`@anthropic-ai/sdk`). Path alias `@/*` → `src/*`.
+Next.js 15 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v3 · Supabase (`@supabase/...`) · Anthropic SDK (`@anthropic-ai/sdk`). Google Cloud Text-to-Speech is called over **REST (no SDK)** for voice. Path alias `@/*` → `src/*`.
 
-- **Models:** all endpoints (`/api/chat`, `/api/end-session`, `/api/export-log`) use **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`). The only sanctioned exception: `/api/end-session` may be raised to Sonnet 4.6 (`claude-sonnet-4-6`) if state JSON output is unreliable (it runs once per session, so cost is negligible). Chat stays on Haiku.
-- **API key:** `ANTHROPIC_API_KEY`, server-side only — never expose to the client. All Anthropic calls go through Next.js API Routes.
+- **Models:** the three Claude endpoints (`/api/chat`, `/api/end-session`, `/api/export-log`) use **Claude Haiku 4.5** (`claude-haiku-4-5-20251001`). The only sanctioned exception: `/api/end-session` may be raised to Sonnet 4.6 (`claude-sonnet-4-6`) if state JSON output is unreliable (it runs once per session, so cost is negligible). Chat stays on Haiku. (`/api/tts` is not a Claude endpoint — it calls Google TTS.)
+- **API keys (both server-side only, never exposed to the client):** `ANTHROPIC_API_KEY` for all Anthropic calls; `GOOGLE_TTS_API_KEY` for the read-aloud voice via `/api/tts`. All go through Next.js API Routes.
 - Supabase RLS and auth are intentionally **not** configured (local/limited environment).
 
 ## Core architecture (the two ideas that matter)
@@ -41,6 +41,7 @@ RPGs span many sessions. **Cross-session continuity is carried entirely by a sin
 - **`POST /api/chat`** — loads `state` + `persona`, builds the system prompt, **streams** the reply (`ReadableStream` of Anthropic text deltas). After the stream completes it persists the user message + assistant reply to `messages` (best-effort: a save failure is logged, never breaks the reply).
 - **`POST /api/end-session`** — sends current `state` + the full session conversation and asks Claude to emit **only the new state JSON**. Parse defensively: strip ```json fences, `JSON.parse`, and on failure keep the old state and surface the error. On success, update `state` + `updated_at`.
 - **`POST /api/export-log`** (Phase 2) — formats the session conversation into a YouTube-ready summary (title ideas / overview / highlights / next-up) for copy-paste.
+- **`POST /api/tts`** (Phase 2) — receives one sentence (`{ text, voice }`) and returns base64 mp3 from Google Cloud TTS (WaveNet) for the partner's read-aloud voice. Not a Claude endpoint; see the voice notes below.
 
 ### 2. Knowledge is injected wholesale into the prompt, with caching
 
