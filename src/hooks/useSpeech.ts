@@ -32,6 +32,8 @@ export function useSpeech() {
   const [speaking, setSpeaking] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  // ユーザーが「聞き取りを続けたい」状態か。無音で onend が来ても、これが true の間は再開する。
+  const shouldListenRef = useRef(false);
 
   // SSR とのハイドレーション不一致を避けるため、対応可否はマウント後に判定する。
   useEffect(() => {
@@ -49,7 +51,8 @@ export function useSpeech() {
     const recognition = new Ctor();
     recognition.lang = "ja-JP";
     recognition.interimResults = false;
-    recognition.continuous = false;
+    // 区切りごとに止めず、無音をはさんでも聞き続ける（録音時間を延ばす）。
+    recognition.continuous = true;
 
     recognition.onresult = (event) => {
       let text = "";
@@ -59,20 +62,41 @@ export function useSpeech() {
       }
       if (text) onFinal(text);
     };
-    // エラーは握りつぶさず、原因が分かる日本語メッセージにして surface する。
+    // 致命的エラー（権限・デバイス・ネットワーク）は止めて画面表示。
+    // 無音（no-speech）などの非致命は止めず、onend での自動再開に任せる。
     recognition.onerror = (event) => {
-      setListening(false);
-      setSttError(sttErrorMessage(event.error));
+      const fatal = ["not-allowed", "service-not-allowed", "audio-capture", "network"].includes(
+        event.error,
+      );
+      if (fatal) {
+        shouldListenRef.current = false;
+        setListening(false);
+        setSttError(sttErrorMessage(event.error));
+      }
     };
-    recognition.onend = () => setListening(false);
+    // 自動終了しても、ユーザーが止めていなければ同じインスタンスを再開して録り続ける。
+    recognition.onend = () => {
+      if (shouldListenRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          shouldListenRef.current = false;
+          setListening(false);
+        }
+      } else {
+        setListening(false);
+      }
+    };
 
     recognitionRef.current = recognition;
     setSttError(null);
+    shouldListenRef.current = true;
     setListening(true);
     // start() は権限拒否や二重起動で同期的に例外を投げることがあるため握る。
     try {
       recognition.start();
     } catch (e) {
+      shouldListenRef.current = false;
       setListening(false);
       setSttError(
         `音声入力を開始できませんでした：${e instanceof Error ? e.message : String(e)}`,
@@ -81,6 +105,8 @@ export function useSpeech() {
   }, []);
 
   const stopListening = useCallback(() => {
+    // 自動再開を止めてから停止する。
+    shouldListenRef.current = false;
     recognitionRef.current?.stop();
     setListening(false);
   }, []);
@@ -104,10 +130,12 @@ export function useSpeech() {
     setSpeaking(false);
   }, []);
 
-  // アンマウント時に読み上げを止める。
+  // アンマウント時に読み上げと音声認識（自動再開含む）を止める。
   useEffect(() => {
     return () => {
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      shouldListenRef.current = false;
+      recognitionRef.current?.stop();
     };
   }, []);
 
