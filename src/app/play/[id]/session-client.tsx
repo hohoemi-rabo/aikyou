@@ -37,7 +37,7 @@ export default function SessionClient({
 
   // 音声（読み上げ ON/OFF）
   const [voiceOutput, setVoiceOutput] = useState(false);
-  const { sttSupported, ttsSupported, listening, startListening, stopListening, speak, cancelSpeak } =
+  const { sttSupported, ttsSupported, listening, sttError, startListening, stopListening, speak, cancelSpeak } =
     useSpeech();
 
   // 冒険ログ出力
@@ -342,6 +342,12 @@ export default function SessionClient({
           </label>
           {!sttSupported && <span>※音声入力はChrome/Edgeで使えます</span>}
         </div>
+
+        {sttError && (
+          <p className="rounded border border-amber-800 bg-amber-950 p-2 text-xs text-amber-300">
+            {sttError}
+          </p>
+        )}
       </section>
 
       {/* 冒険ログ（YouTube用）出力 */}

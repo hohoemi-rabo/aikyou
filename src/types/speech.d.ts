@@ -21,6 +21,12 @@ interface SpeechRecognitionEventLike extends Event {
   readonly results: SpeechRecognitionResultListLike;
 }
 
+interface SpeechRecognitionErrorEventLike extends Event {
+  // "not-allowed" | "no-speech" | "network" | "aborted" | "audio-capture" | ...
+  readonly error: string;
+  readonly message: string;
+}
+
 interface SpeechRecognitionLike extends EventTarget {
   lang: string;
   continuous: boolean;
@@ -29,7 +35,7 @@ interface SpeechRecognitionLike extends EventTarget {
   stop(): void;
   abort(): void;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
 }
 
