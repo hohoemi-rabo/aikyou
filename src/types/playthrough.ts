@@ -20,6 +20,11 @@ export interface PlaythroughState {
   next_goals: string[];
   progress?: string;
   notes?: string;
+  /**
+   * 前回セッションの要約（日本語の短い文章）。end-session が毎回その回ぶんで
+   * 上書きし、次回の続き開始時にチャットの【前回のあらすじ】として相棒へ渡す。
+   */
+  last_session_summary?: string;
   [key: string]: unknown;
 }
 

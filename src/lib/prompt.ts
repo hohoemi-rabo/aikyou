@@ -91,19 +91,28 @@ ${personaText}
 - 必ず「${game_version}」の仕様で答えること。他の版（SFC/GBC/スマホ/HD-2Dリメイク等）の情報を混ぜないこと。職業・呪文・ダンジョン構成は版で異なるため、ここを間違えない。
 - 返事は短く、会話のテンポを大事にする。基本は2〜4文くらいに収める。まず相手に言われたこと・聞かれたことへ的確に応じ、聞かれてもいない攻略情報・選択肢・次の手順までを一度に説明しない。続きが要るときは相手が聞いてくるので、そのとき一歩ずつ出す。
 - 挨拶や雑談には、同じ温度で短く返す（挨拶に対していきなり攻略説明を始めない）。
+- 続きから始めるときは、【前回のあらすじ】があればそれを踏まえて自然に話を続ける。前回の出来事を一から説明し直さない。
 - 「⚠️要確認」と記された情報は未確定なので、事実として断定しない。
 - 返事は音声で読み上げられる。Markdown の装飾記号（* ** # \` ~ など）や箇条書きの記号を使わず、話し言葉の普通の文章で答えること。強調したいときも記号で囲まず言葉で表現する。
 
 【攻略の参考知識（この版の情報）】
 ${knowledge}`;
 
-  return [
+  const blocks: Anthropic.TextBlockParam[] = [
     // 1. 不変部（システム指示＋ナレッジ）。先頭に固定し、ここをキャッシュ対象にする。
     { type: "text", text: instructions, cache_control: { type: "ephemeral" } },
-    // 2. 可変部（現在の状況）。キャッシュ対象外。
-    {
-      type: "text",
-      text: `【現在の冒険の状況】\n${formatState(state)}`,
-    },
   ];
+
+  // 2. 可変部（キャッシュ対象外）。続きの場合は前回のあらすじを先に渡す。
+  const summary =
+    typeof state.last_session_summary === "string" ? state.last_session_summary.trim() : "";
+  if (summary) {
+    blocks.push({ type: "text", text: `【前回のあらすじ】\n${summary}` });
+  }
+  blocks.push({
+    type: "text",
+    text: `【現在の冒険の状況】\n${formatState(state)}`,
+  });
+
+  return blocks;
 }

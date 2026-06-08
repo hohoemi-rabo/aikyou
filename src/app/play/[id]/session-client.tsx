@@ -513,6 +513,14 @@ function Synopsis({ state }: { state: PlaythroughState }) {
 
   return (
     <dl className="space-y-2">
+      {!isEmptyValue(state.last_session_summary) && (
+        <div>
+          <dt className="font-medium text-slate-400">前回のあらすじ</dt>
+          <dd>
+            <RenderValue value={state.last_session_summary} />
+          </dd>
+        </div>
+      )}
       <div>
         <dt className="font-medium text-slate-400">パーティ</dt>
         <dd>
