@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { ChatMessage } from "@/types/chat";
 import type { PlaythroughState, Persona } from "@/types/playthrough";
 import { updatePersona } from "@/app/actions";
 import { useSpeech } from "@/hooks/useSpeech";
 import { useTts } from "@/hooks/useTts";
-import { TTS_VOICES } from "@/types/tts";
+import { TTS_VOICES, isKnownVoice } from "@/types/tts";
 
 /**
  * ストリーミング中のバッファから「文末（。！？!?改行）まで確定した文」を切り出す。
@@ -59,6 +59,29 @@ export default function SessionClient({
   const [voiceOutput, setVoiceOutput] = useState(false);
   const { sttSupported, listening, sttError, startListening, stopListening } = useSpeech();
   const { voice, setVoice, ttsError, enqueue, cancel: cancelTts } = useTts();
+
+  // 声・読み上げON/OFF はプレイスルーごとに localStorage で記憶し、再開時に復元する。
+  // localStorage は SSR で参照できないため、マウント後（useEffect）に読み込む。
+  const [voicePrefsLoaded, setVoicePrefsLoaded] = useState(false);
+  const voiceKey = `aikyou:voice:${id}`;
+  const voiceOutputKey = `aikyou:voiceOutput:${id}`;
+
+  useEffect(() => {
+    const savedVoice = localStorage.getItem(voiceKey);
+    if (savedVoice && isKnownVoice(savedVoice)) setVoice(savedVoice);
+    const savedOutput = localStorage.getItem(voiceOutputKey);
+    if (savedOutput !== null) setVoiceOutput(savedOutput === "true");
+    setVoicePrefsLoaded(true);
+    // 復元は初回マウント時のみ（id 単位）。
+  }, [voiceKey, voiceOutputKey, setVoice]);
+
+  // 復元が済んでから保存する（初期値で上書きしないため）。
+  useEffect(() => {
+    if (voicePrefsLoaded) localStorage.setItem(voiceKey, voice);
+  }, [voice, voiceKey, voicePrefsLoaded]);
+  useEffect(() => {
+    if (voicePrefsLoaded) localStorage.setItem(voiceOutputKey, String(voiceOutput));
+  }, [voiceOutput, voiceOutputKey, voicePrefsLoaded]);
 
   // 冒険ログ出力
   const [exporting, setExporting] = useState(false);
@@ -147,6 +170,17 @@ export default function SessionClient({
     }
   }
 
+  // 保存中（end-session 実行中）はタブを閉じる／リロードを警告して、保存の中断を防ぐ。
+  useEffect(() => {
+    if (!ending) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [ending]);
+
   async function savePersona() {
     setSavingPersona(true);
     setError(null);
@@ -204,14 +238,48 @@ export default function SessionClient({
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-8">
+      {/* 保存中は画面全体を覆って操作させない（保存の中断を防ぐ）。 */}
+      {ending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <div className="flex items-center gap-3 rounded-lg border border-slate-600 bg-slate-800 px-6 py-4 text-slate-100 shadow-xl">
+            <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-500 border-t-slate-100" />
+            <span className="text-sm font-medium">保存中… そのままお待ちください</span>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <Link href="/" className="text-sm text-slate-400 hover:text-slate-200 hover:underline">
+        <Link
+          href="/"
+          aria-disabled={ending}
+          onClick={(e) => {
+            if (ending) e.preventDefault();
+          }}
+          className={`text-sm ${
+            ending
+              ? "pointer-events-none text-slate-600"
+              : "text-slate-400 hover:text-slate-200 hover:underline"
+          }`}
+        >
           ← 一覧へ戻る
         </Link>
         <div className="flex items-center gap-2">
           <Link
             href={`/play/${id}/log`}
-            className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800"
+            aria-disabled={ending}
+            onClick={(e) => {
+              if (ending) e.preventDefault();
+            }}
+            className={`rounded border border-slate-600 px-3 py-1.5 text-sm font-medium ${
+              ending
+                ? "pointer-events-none text-slate-600 opacity-50"
+                : "text-slate-200 hover:bg-slate-800"
+            }`}
           >
             ふりかえり
           </Link>
