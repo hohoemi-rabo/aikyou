@@ -41,7 +41,7 @@ RPGs span many sessions. **Cross-session continuity is carried entirely by a sin
 - **`POST /api/chat`** — loads `state` + `persona`, builds the system prompt, **streams** the reply (`ReadableStream` of Anthropic text deltas). After the stream completes it persists the user message + assistant reply to `messages` (best-effort: a save failure is logged, never breaks the reply).
 - **`POST /api/end-session`** — sends current `state` + the full session conversation and asks Claude to emit **only the new state JSON**, including a fresh **`last_session_summary`** (this session's recap, for next time). Parse defensively: strip ```json fences, `JSON.parse`, and on failure keep the old state and surface the error. On success, update `state` + `updated_at`. (Continuity only updates when the user actually ends the session.)
 - **`POST /api/export-log`** (Phase 2) — formats the session conversation into a YouTube-ready summary (title ideas / overview / highlights / next-up) for copy-paste.
-- **`POST /api/tts`** (Phase 2) — receives one sentence (`{ text, voice }`) and returns base64 mp3 from Google Cloud TTS (WaveNet) for the partner's read-aloud voice. Not a Claude endpoint; see the voice notes below.
+- **`POST /api/tts`** (Phase 2) — receives one sentence (`{ text, voice }`) and returns base64 mp3 from Google Cloud TTS (WaveNet / Neural2 / Chirp3-HD) for the partner's read-aloud voice. Not a Claude endpoint; see the voice notes below.
 
 ### 2. Knowledge is injected wholesale into the prompt, with caching
 
@@ -68,7 +68,7 @@ All game content must match the **Famicom (FC) 1988** version — never mix in S
 - **Server Components を既定にし、`"use client"` は最小限に。** クライアント側 JS とバンドルサイズを抑えるため、`"use client"` は状態やイベントを持つ末端コンポーネントだけに付ける。MVP のチャット入力欄まわりが該当する。
 - **チャット応答はストリーミング実装済み（Phase 2）。** `/api/chat` は `anthropic.messages.stream(...)` のテキスト差分を `ReadableStream`（`text/plain; charset=utf-8`）でそのまま返し、クライアントは `res.body.getReader()` ＋ `TextDecoder({ stream: true })` で1文字ずつ表示する（マルチバイト境界は TextDecoder が吸収）。`loading.tsx` / `<Suspense>` は引き続き任意。
 - **音声入力（STT）は Web Speech API（ブラウザ標準・クライアントのみ）。** `src/hooks/useSpeech.ts` に閉じる。型は標準 lib に無いため `src/types/speech.d.ts` で最小宣言。対応可否は `useEffect` 後に判定（SSR ハイドレーション不一致回避）。Chrome/Edge 前提、非対応時は無効表示。エラーは握りつぶさず `sttError` で画面表示。
-- **読み上げ（TTS）は Google Cloud Text-to-Speech（WaveNet）。** API キー（`GOOGLE_TTS_API_KEY`、サーバ専用）で `src/app/api/tts/route.ts` から REST 呼び出し（SDK 不使用・依存を増やさない）。クライアント側は `src/hooks/useTts.ts` が**文単位の逐次再生キュー**を持ち、チャットのストリーミング中に文末（。！？!?改行）が確定するたび `/api/tts` で mp3 を生成して順番に再生する。ボイスは `src/types/tts.ts` の日本語 WaveNet 一覧から画面で切替。WaveNet は月100万字まで無料枠。
+- **読み上げ（TTS）は Google Cloud Text-to-Speech。** API キー（`GOOGLE_TTS_API_KEY`、サーバ専用）で `src/app/api/tts/route.ts` から REST 呼び出し（SDK 不使用・依存を増やさない）。クライアント側は `src/hooks/useTts.ts` が**文単位の逐次再生キュー**を持ち、チャットのストリーミング中に文末（。！？!?改行）が確定するたび `/api/tts` で mp3 を生成して順番に再生する。ボイスは `src/types/tts.ts` の一覧から画面で切替：**WaveNet / Neural2 / Chirp3-HD**（いずれも同じ `text:synthesize` エンドポイント・同じ API キー、各エンジン月100万字まで無料枠）。`TtsVoice` は `voiceName` ＋任意の `modelName`/`prompt` を持ち、`synthesizeSpeech` が1経路で出し分ける。**Gemini-TTS** は有料（Vertex AI 有効化が必要・`modelName` に Gemini モデルを指定し `input.prompt` で口調指示）のため、設定だけ `GEMINI_VOICE` として残しドロップダウンからは外している。
 
 ## Scope discipline
 
