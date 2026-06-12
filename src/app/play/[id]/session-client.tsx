@@ -370,7 +370,7 @@ export default function SessionClient({
             className={`rounded border px-3 py-1.5 text-sm font-medium ${
               recording
                 ? "border-red-500 bg-red-600 text-white hover:bg-red-500"
-                : "border-slate-600 text-slate-200 hover:bg-slate-800"
+                : "border-green-500 bg-green-600 text-white hover:bg-green-500"
             }`}
           >
             {recording ? "通常表示に戻す" : "録画モード"}
