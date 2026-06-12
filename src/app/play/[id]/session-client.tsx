@@ -35,6 +35,22 @@ interface Props {
   initialPersona: Persona;
 }
 
+/** 録画モードのチャット文字サイズ。OBS の枠の大きさに合わせて切り替える。 */
+type ChatFontSize = "base" | "lg" | "2xl";
+const FONT_OPTIONS: { value: ChatFontSize; label: string }[] = [
+  { value: "base", label: "小" },
+  { value: "lg", label: "中" },
+  { value: "2xl", label: "大" },
+];
+const FONT_CLASS: Record<ChatFontSize, string> = {
+  base: "text-base",
+  lg: "text-lg",
+  "2xl": "text-2xl",
+};
+function isChatFontSize(v: string): v is ChatFontSize {
+  return v === "base" || v === "lg" || v === "2xl";
+}
+
 export default function SessionClient({
   id,
   title,
@@ -56,24 +72,35 @@ export default function SessionClient({
   const [savingPersona, setSavingPersona] = useState(false);
 
   // 音声入力（STT）はブラウザ標準。出力（読み上げ）は Google TTS（useTts）。
-  const [voiceOutput, setVoiceOutput] = useState(false);
+  // 既定で ON（つけ忘れ防止）。localStorage に保存があればそれを優先して復元する。
+  const [voiceOutput, setVoiceOutput] = useState(true);
   const { sttSupported, listening, sttError, startListening, stopListening } = useSpeech();
   const { voice, setVoice, ttsError, enqueue, cancel: cancelTts } = useTts();
 
-  // 声・読み上げON/OFF はプレイスルーごとに localStorage で記憶し、再開時に復元する。
+  // 録画モード（会話だけを大きく表示）と文字サイズ。録画するときだけ ON にする。
+  const [recording, setRecording] = useState(false);
+  const [chatFontSize, setChatFontSize] = useState<ChatFontSize>("lg");
+
+  // 声・読み上げON/OFF・録画設定はプレイスルーごとに localStorage で記憶し、再開時に復元する。
   // localStorage は SSR で参照できないため、マウント後（useEffect）に読み込む。
   const [voicePrefsLoaded, setVoicePrefsLoaded] = useState(false);
   const voiceKey = `aikyou:voice:${id}`;
   const voiceOutputKey = `aikyou:voiceOutput:${id}`;
+  const recordingKey = `aikyou:recording:${id}`;
+  const fontSizeKey = `aikyou:fontSize:${id}`;
 
   useEffect(() => {
     const savedVoice = localStorage.getItem(voiceKey);
     if (savedVoice && isKnownVoice(savedVoice)) setVoice(savedVoice);
     const savedOutput = localStorage.getItem(voiceOutputKey);
     if (savedOutput !== null) setVoiceOutput(savedOutput === "true");
+    const savedRecording = localStorage.getItem(recordingKey);
+    if (savedRecording !== null) setRecording(savedRecording === "true");
+    const savedFontSize = localStorage.getItem(fontSizeKey);
+    if (savedFontSize && isChatFontSize(savedFontSize)) setChatFontSize(savedFontSize);
     setVoicePrefsLoaded(true);
     // 復元は初回マウント時のみ（id 単位）。
-  }, [voiceKey, voiceOutputKey, setVoice]);
+  }, [voiceKey, voiceOutputKey, recordingKey, fontSizeKey, setVoice]);
 
   // 復元が済んでから保存する（初期値で上書きしないため）。
   useEffect(() => {
@@ -82,6 +109,12 @@ export default function SessionClient({
   useEffect(() => {
     if (voicePrefsLoaded) localStorage.setItem(voiceOutputKey, String(voiceOutput));
   }, [voiceOutput, voiceOutputKey, voicePrefsLoaded]);
+  useEffect(() => {
+    if (voicePrefsLoaded) localStorage.setItem(recordingKey, String(recording));
+  }, [recording, recordingKey, voicePrefsLoaded]);
+  useEffect(() => {
+    if (voicePrefsLoaded) localStorage.setItem(fontSizeKey, chatFontSize);
+  }, [chatFontSize, fontSizeKey, voicePrefsLoaded]);
 
   // 冒険ログ出力
   const [exporting, setExporting] = useState(false);
@@ -237,7 +270,11 @@ export default function SessionClient({
   const personaLabel = persona.name ? `相棒：${persona.name}` : "相棒の設定";
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-8">
+    <main
+      className={`mx-auto flex flex-col gap-4 px-6 py-8 ${
+        recording ? "max-w-none" : "max-w-3xl"
+      }`}
+    >
       {/* 保存中は画面全体を覆って操作させない（保存の中断を防ぐ）。 */}
       {ending && (
         <div
@@ -253,61 +290,96 @@ export default function SessionClient({
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <Link
-          href="/"
-          aria-disabled={ending}
-          onClick={(e) => {
-            if (ending) e.preventDefault();
-          }}
-          className={`text-sm ${
-            ending
-              ? "pointer-events-none text-slate-600"
-              : "text-slate-400 hover:text-slate-200 hover:underline"
-          }`}
-        >
-          ← 一覧へ戻る
-        </Link>
-        <div className="flex items-center gap-2">
+      {!recording && (
+        <div className="flex items-center justify-between">
           <Link
-            href={`/play/${id}/log`}
+            href="/"
             aria-disabled={ending}
             onClick={(e) => {
               if (ending) e.preventDefault();
             }}
-            className={`rounded border border-slate-600 px-3 py-1.5 text-sm font-medium ${
+            className={`text-sm ${
               ending
-                ? "pointer-events-none text-slate-600 opacity-50"
-                : "text-slate-200 hover:bg-slate-800"
+                ? "pointer-events-none text-slate-600"
+                : "text-slate-400 hover:text-slate-200 hover:underline"
             }`}
           >
-            ふりかえり
+            ← 一覧へ戻る
           </Link>
-          <button
-            onClick={endSession}
-            disabled={ending}
-            className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
-          >
-            {ending ? "保存中…" : "セッション終了して保存"}
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/play/${id}/log`}
+              aria-disabled={ending}
+              onClick={(e) => {
+                if (ending) e.preventDefault();
+              }}
+              className={`rounded border border-slate-600 px-3 py-1.5 text-sm font-medium ${
+                ending
+                  ? "pointer-events-none text-slate-600 opacity-50"
+                  : "text-slate-200 hover:bg-slate-800"
+              }`}
+            >
+              ふりかえり
+            </Link>
+            <button
+              onClick={endSession}
+              disabled={ending}
+              className="rounded border border-slate-600 px-3 py-1.5 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {ending ? "保存中…" : "セッション終了して保存"}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       <header className="flex items-center justify-between gap-2">
         <div>
           <h1 className="text-xl font-bold text-slate-100">{title}</h1>
-          <p className="text-sm text-slate-400">{gameVersion}</p>
+          {!recording && <p className="text-sm text-slate-400">{gameVersion}</p>}
         </div>
-        <button
-          onClick={() => setPersonaOpen((v) => !v)}
-          className="shrink-0 rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-        >
-          {personaLabel}
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* 録画モード中だけ文字サイズを切り替えられる（OBS の枠に合わせる）。 */}
+          {recording && (
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-slate-400">文字</span>
+              {FONT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setChatFontSize(opt.value)}
+                  className={`rounded border px-2 py-1 text-sm ${
+                    chatFontSize === opt.value
+                      ? "border-blue-500 bg-blue-600 text-white"
+                      : "border-slate-600 text-slate-200 hover:bg-slate-800"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {!recording && (
+            <button
+              onClick={() => setPersonaOpen((v) => !v)}
+              className="rounded border border-slate-600 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+            >
+              {personaLabel}
+            </button>
+          )}
+          <button
+            onClick={() => setRecording((v) => !v)}
+            className={`rounded border px-3 py-1.5 text-sm font-medium ${
+              recording
+                ? "border-red-500 bg-red-600 text-white hover:bg-red-500"
+                : "border-slate-600 text-slate-200 hover:bg-slate-800"
+            }`}
+          >
+            {recording ? "通常表示に戻す" : "録画モード"}
+          </button>
+        </div>
       </header>
 
       {/* 相棒（ペルソナ）の設定 */}
-      {personaOpen && (
+      {!recording && personaOpen && (
         <section className="space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
           <h2 className="font-semibold text-slate-100">相棒の設定</h2>
           <div className="flex flex-col gap-1">
@@ -349,10 +421,12 @@ export default function SessionClient({
       )}
 
       {/* 前回までのあらすじ */}
-      <section className="rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
-        <h2 className="mb-2 font-semibold text-slate-100">前回までのあらすじ</h2>
-        <Synopsis state={state} />
-      </section>
+      {!recording && (
+        <section className="rounded-lg border border-slate-700 bg-slate-800 p-4 text-sm">
+          <h2 className="mb-2 font-semibold text-slate-100">前回までのあらすじ</h2>
+          <Synopsis state={state} />
+        </section>
+      )}
 
       {error && (
         <p className="rounded border border-red-800 bg-red-950 p-3 text-sm text-red-300">
@@ -361,7 +435,11 @@ export default function SessionClient({
       )}
 
       {/* チャット */}
-      <section className="flex min-h-[40vh] flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4">
+      <section
+        className={`flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 ${
+          recording ? "min-h-[75vh]" : "min-h-[40vh]"
+        }`}
+      >
         <div className="flex-1 space-y-3 overflow-y-auto">
           {messages.length === 0 ? (
             <p className="text-sm text-slate-400">
@@ -374,7 +452,9 @@ export default function SessionClient({
                 className={m.role === "user" ? "text-right" : "text-left"}
               >
                 <span
-                  className={`inline-block whitespace-pre-wrap rounded-lg px-3 py-2 text-sm ${
+                  className={`inline-block whitespace-pre-wrap rounded-lg px-3 py-2 leading-relaxed ${
+                    recording ? FONT_CLASS[chatFontSize] : "text-sm"
+                  } ${
                     m.role === "user"
                       ? "bg-blue-600 text-white"
                       : "bg-slate-700 text-slate-100"
@@ -425,39 +505,42 @@ export default function SessionClient({
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={voiceOutput}
-              onChange={(e) => {
-                setVoiceOutput(e.target.checked);
-                if (!e.target.checked) cancelTts();
-              }}
-            />
-            相棒の返事を読み上げる
-          </label>
+        {/* 声まわりの設定は通常表示のときだけ。録画中は会話をすっきり見せる（設定は保持される）。 */}
+        {!recording && (
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={voiceOutput}
+                onChange={(e) => {
+                  setVoiceOutput(e.target.checked);
+                  if (!e.target.checked) cancelTts();
+                }}
+              />
+              相棒の返事を読み上げる
+            </label>
 
-          <label className="flex items-center gap-1.5">
-            <span>声</span>
-            <select
-              value={voice}
-              onChange={(e) => {
-                setVoice(e.target.value);
-                cancelTts(); // 切替時は再生中の旧ボイスを止める。
-              }}
-              className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100"
-            >
-              {TTS_VOICES.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            <label className="flex items-center gap-1.5">
+              <span>声</span>
+              <select
+                value={voice}
+                onChange={(e) => {
+                  setVoice(e.target.value);
+                  cancelTts(); // 切替時は再生中の旧ボイスを止める。
+                }}
+                className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-100"
+              >
+                {TTS_VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.label}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          {!sttSupported && <span>※音声入力はChrome/Edgeで使えます</span>}
-        </div>
+            {!sttSupported && <span>※音声入力はChrome/Edgeで使えます</span>}
+          </div>
+        )}
 
         {(sttError || ttsError) && (
           <p className="rounded border border-amber-800 bg-amber-950 p-2 text-xs text-amber-300">
@@ -467,6 +550,7 @@ export default function SessionClient({
       </section>
 
       {/* 冒険ログ（YouTube用）出力 */}
+      {!recording && (
       <section className="space-y-3 rounded-lg border border-slate-700 bg-slate-800 p-4">
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-semibold text-slate-100">動画用ログ</h2>
@@ -494,6 +578,7 @@ export default function SessionClient({
           </div>
         )}
       </section>
+      )}
     </main>
   );
 }
