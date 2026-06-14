@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAnthropic, MODEL_END_SESSION } from "@/lib/anthropic";
+import { getGemini, MODEL_END_SESSION, SAFETY_SETTINGS } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
 import type { ChatMessage } from "@/types/chat";
 import type { Playthrough, PlaythroughState } from "@/types/playthrough";
@@ -85,17 +85,34 @@ export async function POST(req: Request) {
     `【前回までの状態】\n${JSON.stringify(oldState, null, 2)}\n\n` +
     `【今回のプレイ会話】\n${transcript}`;
 
-  const anthropic = getAnthropic();
-  const response = await anthropic.messages.create({
-    model: MODEL_END_SESSION,
-    max_tokens: 2048,
-    system,
-    messages: [{ role: "user", content: userContent }],
-  });
-
-  const raw = response.content
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("");
+  const ai = getGemini();
+  let raw: string;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_END_SESSION,
+      contents: userContent,
+      config: {
+        systemInstruction: system,
+        maxOutputTokens: 2048,
+        // JSON だけを返させる（コードフェンスや前置きが付かない）。
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
+        safetySettings: SAFETY_SETTINGS,
+      },
+    });
+    raw = response.text ?? "";
+  } catch (e) {
+    return NextResponse.json(
+      {
+        error: `state 更新の生成に失敗しました（旧stateを維持）: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+        state: oldState,
+        updated: false,
+      },
+      { status: 502 },
+    );
+  }
 
   // 防御的パース：失敗時は旧 state を維持し、エラーを画面に出す。
   let newState: PlaythroughState;

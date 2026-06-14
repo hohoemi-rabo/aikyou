@@ -1,4 +1,3 @@
-import type Anthropic from "@anthropic-ai/sdk";
 import type { PlaythroughState, Persona } from "@/types/playthrough";
 import { loadKnowledge } from "@/lib/knowledge";
 
@@ -68,20 +67,24 @@ interface BuildSystemParams {
 }
 
 /**
- * Claude に渡す system ブロック配列を組み立てる。
+ * Gemini に渡す systemInstruction 文字列を組み立てる。
  *
- * プロンプトキャッシュを効かせるため順序を固定する：
- *  1. システム指示 ＋ 連結ナレッジ（毎回不変）← cache_control: ephemeral を付与
- *  2. 現在の state（毎セッション変わる）← キャッシュ対象外
+ * Gemini の暗黙キャッシュ（implicit caching）はリクエスト先頭の安定した部分に効く。
+ * そこで順序を固定する：
+ *  1. システム指示 ＋ ペルソナ ＋ 連結ナレッジ（プレイスルー内で不変・キャッシュの主対象）
+ *  2. 前回のあらすじ＋現在の state（セッション内では不変。end-session 時のみ更新）
+ *  3. 生成直前のリマインダー（1問1答の念押し）
+ * state はセッション中ずっと同じなので、同一セッションの連続リクエストでは
+ * systemInstruction がバイト一致し、暗黙キャッシュがそのまま効く。
  *
- * 会話履歴は messages 側で渡す（ここには含めない）。
+ * 会話履歴は contents 側で渡す（ここには含めない）。
  */
-export async function buildSystemBlocks({
+export async function buildSystemInstruction({
   title,
   game_version,
   state,
   persona,
-}: BuildSystemParams): Promise<Anthropic.TextBlockParam[]> {
+}: BuildSystemParams): Promise<string> {
   const knowledge = await loadKnowledge();
   const personaText = formatPersona(persona);
 
@@ -99,27 +102,21 @@ ${personaText}
 【攻略の参考知識（この版の情報）】
 ${knowledge}`;
 
-  const blocks: Anthropic.TextBlockParam[] = [
-    // 1. 不変部（システム指示＋ナレッジ）。先頭に固定し、ここをキャッシュ対象にする。
-    { type: "text", text: instructions, cache_control: { type: "ephemeral" } },
-  ];
+  // 1. 不変部（システム指示＋ナレッジ）を先頭に固定。
+  const parts: string[] = [instructions];
 
-  // 2. 可変部（キャッシュ対象外）。続きの場合は前回のあらすじを先に渡す。
+  // 2. 可変部。続きの場合は前回のあらすじを先に渡す。
   const summary =
     typeof state.last_session_summary === "string" ? state.last_session_summary.trim() : "";
   if (summary) {
-    blocks.push({ type: "text", text: `【前回のあらすじ】\n${summary}` });
+    parts.push(`【前回のあらすじ】\n${summary}`);
   }
-  blocks.push({
-    type: "text",
-    text: `【現在の冒険の状況】\n${formatState(state)}`,
-  });
+  parts.push(`【現在の冒険の状況】\n${formatState(state)}`);
 
   // 3. 生成直前のリマインダー（追従を強める）。質問返しを最後にもう一度禁止する。
-  blocks.push({
-    type: "text",
-    text: "【返信前の確認】1問1答を厳守。相手に質問を返さない。語尾を「？」にして投げ返さず、言い切りの文で終える。",
-  });
+  parts.push(
+    "【返信前の確認】1問1答を厳守。相手に質問を返さない。語尾を「？」にして投げ返さず、言い切りの文で終える。",
+  );
 
-  return blocks;
+  return parts.join("\n\n");
 }

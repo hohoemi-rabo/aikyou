@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAnthropic, MODEL_CHAT } from "@/lib/anthropic";
+import { getGemini, MODEL_CHAT, SAFETY_SETTINGS } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
 import type { ChatMessage } from "@/types/chat";
 import type { Playthrough } from "@/types/playthrough";
@@ -55,17 +55,26 @@ export async function POST(req: Request) {
     "マークダウンの見出しと箇条書きを使い、視聴者が読んで分かる自然な日本語にする。" +
     "ネタバレ配慮や誇張は不要、事実ベースで簡潔に。";
 
-  const anthropic = getAnthropic();
-  const response = await anthropic.messages.create({
-    model: MODEL_CHAT,
-    max_tokens: 1500,
-    system,
-    messages: [{ role: "user", content: `【今回のプレイ会話】\n${transcript}` }],
-  });
-
-  const log = response.content
-    .map((block) => (block.type === "text" ? block.text : ""))
-    .join("");
+  const ai = getGemini();
+  let log: string;
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_CHAT,
+      contents: `【今回のプレイ会話】\n${transcript}`,
+      config: {
+        systemInstruction: system,
+        maxOutputTokens: 1500,
+        thinkingConfig: { thinkingBudget: 0 },
+        safetySettings: SAFETY_SETTINGS,
+      },
+    });
+    log = response.text ?? "";
+  } catch (e) {
+    return NextResponse.json(
+      { error: `ログ生成に失敗しました: ${e instanceof Error ? e.message : String(e)}` },
+      { status: 502 },
+    );
+  }
 
   return NextResponse.json({ log });
 }

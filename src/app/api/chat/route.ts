@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getAnthropic, MODEL_CHAT } from "@/lib/anthropic";
+import { getGemini, MODEL_CHAT, SAFETY_SETTINGS } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
-import { buildSystemBlocks } from "@/lib/prompt";
+import { buildSystemInstruction } from "@/lib/prompt";
 import type { ChatMessage } from "@/types/chat";
 import type { Playthrough } from "@/types/playthrough";
 
-// process.cwd() でのファイル読込・Anthropic SDK のため Node ランタイム必須。
+// process.cwd() でのファイル読込・Gen AI SDK のため Node ランタイム必須。
 export const runtime = "nodejs";
 // AI 応答はキャッシュしない。
 export const dynamic = "force-dynamic";
@@ -46,21 +46,41 @@ export async function POST(req: Request) {
     );
   }
 
-  // システムプロンプト（不変ナレッジ＋ペルソナ＋現在 state）を組み立てて Claude に投げる。
-  const system = await buildSystemBlocks({
+  // システムプロンプト（不変ナレッジ＋ペルソナ＋現在 state）を組み立てて Gemini に投げる。
+  const systemInstruction = await buildSystemInstruction({
     title: data.title,
     game_version: data.game_version,
     state: data.state,
     persona: data.persona,
   });
 
-  const anthropic = getAnthropic();
-  const claudeStream = anthropic.messages.stream({
-    model: MODEL_CHAT,
-    max_tokens: 1024,
-    system,
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-  });
+  // Gemini は role が "user" / "model"（assistant ではない）。
+  const contents = messages.map((m) => ({
+    role: m.role === "assistant" ? "model" : "user",
+    parts: [{ text: m.content }],
+  }));
+
+  // ストリーム生成はここで await し、失敗（残高・レート制限等）はきれいな JSON エラーで返す。
+  const ai = getGemini();
+  let geminiStream;
+  try {
+    geminiStream = await ai.models.generateContentStream({
+      model: MODEL_CHAT,
+      contents,
+      config: {
+        systemInstruction,
+        maxOutputTokens: 1024,
+        // Flash-Lite は既定で thinking 無効だが、テンポ最優先のため明示的に切る。
+        thinkingConfig: { thinkingBudget: 0 },
+        safetySettings: SAFETY_SETTINGS,
+      },
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: `AI応答の生成に失敗しました: ${e instanceof Error ? e.message : String(e)}` },
+      { status: 502 },
+    );
+  }
 
   // 今回のユーザー発言（履歴の末尾）。応答完了後に DB へ保存する。
   const lastUser = messages[messages.length - 1];
@@ -71,13 +91,11 @@ export async function POST(req: Request) {
     async start(controller) {
       let full = "";
       try {
-        for await (const event of claudeStream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            full += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+        for await (const chunk of geminiStream) {
+          const text = chunk.text;
+          if (text) {
+            full += text;
+            controller.enqueue(encoder.encode(text));
           }
         }
         controller.close();
