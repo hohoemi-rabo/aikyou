@@ -56,6 +56,8 @@ The Gemini API does **not** open URLs. "Making the AI aware" of strategy knowled
 
 All game content must match the **Famicom (FC) 1988** version — never mix in SFC/GBC/mobile/HD-2D remake facts (jobs, spells, dungeon layouts differ by version). `game_version` exists to enforce this in the system prompt. `knowledge/dq3-fc/_ai-notes.md` documents the FC-specific gotchas (no personality system, no Pachisi, battery-backup saves, etc.) and items flagged `⚠️要確認` are unverified and must not be stated as fact.
 
+The system prompt (`buildSystemInstruction` in `src/lib/prompt.ts`) enforces two behaviors worth knowing when editing prompts or knowledge: **(1) the injected knowledge is the source of truth** — the model must not override it with its own (often remake-era) memory, and when the player presupposes something the knowledge doesn't support (e.g. "list the chests the thief's key opens" in a town that has none) it says so rather than forcing a wrong match. Cross-file reasoning is expected (key tiers live in `items-misc.md`, per-chest key requirements in `items-treasure-event.md`), which is part of why chat runs on Flash, not Flash-Lite. **(2) strict one-question-one-answer** — the partner never asks the player anything, not even in greetings/small talk (it greets back and stops); continuing the conversation is the player's job.
+
 ## Next.js App Router の作法 (15.5.x)
 
 このプロジェクトの構成（Route Handler にサーバー処理を集約し、クライアントから fetch する）に直結する範囲のベストプラクティス。出典は context7 の Next.js 公式ドキュメント。
