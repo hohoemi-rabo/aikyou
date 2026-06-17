@@ -144,6 +144,9 @@ export default function SessionClient({
     const text = input.trim();
     if (!text || sending) return;
 
+    // 録音中に送信したら、マイクは自動で止める（つけっぱなし防止）。
+    if (listening) stopListening();
+
     setError(null);
     cancelTts();
     const next: ChatMessage[] = [...messages, { role: "user", content: text }];
