@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChatMessage } from "@/types/chat";
 import type { PlaythroughState, Persona } from "@/types/playthrough";
@@ -60,6 +60,25 @@ export default function SessionClient({
 }: Props) {
   // 会話履歴はこのセッション中だけクライアントのメモリに保持（リロードで消えてよい）。
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+
+  // 自動スクロール：新しい発言・ストリーミング中の追記のたびに一番下へ追従する。
+  // ただしユーザーが自分で上にスクロールして読んでいる間は追従を止める（near-bottom 判定）。
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+
+  function handleChatScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    // 末尾から 80px 以内にいれば「下に張り付いている」とみなす。
+    stickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
+
+  useEffect(() => {
+    if (stickToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ block: "end" });
+    }
+  }, [messages]);
   const [input, setInput] = useState("");
   const [state, setState] = useState<PlaythroughState>(initialState);
   const [sending, setSending] = useState(false);
@@ -440,7 +459,11 @@ export default function SessionClient({
           recording ? "min-h-[75vh]" : "min-h-[40vh]"
         }`}
       >
-        <div className="flex-1 space-y-3 overflow-y-auto">
+        <div
+          ref={scrollRef}
+          onScroll={handleChatScroll}
+          className="flex-1 space-y-3 overflow-y-auto"
+        >
           {messages.length === 0 ? (
             <p className="text-sm text-slate-400">
               相棒に話しかけてみましょう。会話はこのセッション中だけ保持されます。
@@ -468,6 +491,8 @@ export default function SessionClient({
           {sending && messages[messages.length - 1]?.role === "user" && (
             <p className="text-sm text-slate-400">相棒が考え中…</p>
           )}
+          {/* 自動スクロールの着地点（常に一番下） */}
+          <div ref={bottomRef} />
         </div>
 
         <div className="flex gap-2">
