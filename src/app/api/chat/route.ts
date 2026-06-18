@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getGemini, MODEL_CHAT, SAFETY_SETTINGS } from "@/lib/gemini";
+import { getGemini, MODEL_CHAT, SAFETY_SETTINGS, withRetry } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
 import { buildSystemInstruction } from "@/lib/prompt";
 import type { ChatMessage } from "@/types/chat";
@@ -64,17 +64,19 @@ export async function POST(req: Request) {
   const ai = getGemini();
   let geminiStream;
   try {
-    geminiStream = await ai.models.generateContentStream({
-      model: MODEL_CHAT,
-      contents,
-      config: {
-        systemInstruction,
-        maxOutputTokens: 1024,
-        // Flash-Lite は既定で thinking 無効だが、テンポ最優先のため明示的に切る。
-        thinkingConfig: { thinkingBudget: 0 },
-        safetySettings: SAFETY_SETTINGS,
-      },
-    });
+    geminiStream = await withRetry(() =>
+      ai.models.generateContentStream({
+        model: MODEL_CHAT,
+        contents,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 1024,
+          // テンポ最優先のため thinking を明示的に切る。
+          thinkingConfig: { thinkingBudget: 0 },
+          safetySettings: SAFETY_SETTINGS,
+        },
+      }),
+    );
   } catch (e) {
     return NextResponse.json(
       { error: `AI応答の生成に失敗しました: ${e instanceof Error ? e.message : String(e)}` },

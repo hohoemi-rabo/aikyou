@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getGemini, MODEL_END_SESSION, SAFETY_SETTINGS } from "@/lib/gemini";
+import { getGemini, MODEL_END_SESSION, SAFETY_SETTINGS, withRetry } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
 import type { ChatMessage } from "@/types/chat";
 import type { Playthrough, PlaythroughState } from "@/types/playthrough";
@@ -88,18 +88,21 @@ export async function POST(req: Request) {
   const ai = getGemini();
   let raw: string;
   try {
-    const response = await ai.models.generateContent({
-      model: MODEL_END_SESSION,
-      contents: userContent,
-      config: {
-        systemInstruction: system,
-        maxOutputTokens: 2048,
-        // JSON だけを返させる（コードフェンスや前置きが付かない）。
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        safetySettings: SAFETY_SETTINGS,
-      },
-    });
+    // 進行の保存は重要なので、一時的な過負荷（503 等）は自動リトライする。
+    const response = await withRetry(() =>
+      ai.models.generateContent({
+        model: MODEL_END_SESSION,
+        contents: userContent,
+        config: {
+          systemInstruction: system,
+          maxOutputTokens: 2048,
+          // JSON だけを返させる（コードフェンスや前置きが付かない）。
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          safetySettings: SAFETY_SETTINGS,
+        },
+      }),
+    );
     raw = response.text ?? "";
   } catch (e) {
     return NextResponse.json(

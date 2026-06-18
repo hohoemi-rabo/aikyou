@@ -47,3 +47,48 @@ export function getGemini(): GoogleGenAI {
   client = new GoogleGenAI({ apiKey });
   return client;
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 一時的なエラー（過負荷・レート制限・瞬断）かどうか。
+ * 503 UNAVAILABLE / 429 RESOURCE_EXHAUSTED / 500 などは時間をおけば回復する。
+ */
+function isTransientError(e: unknown): boolean {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase();
+  return [
+    "503",
+    "unavailable",
+    "high demand",
+    "overloaded",
+    "429",
+    "resource_exhausted",
+    "rate limit",
+    "500",
+    "internal",
+    "deadline",
+    "timeout",
+  ].some((p) => msg.includes(p));
+}
+
+/**
+ * 一時的なエラーのときだけ指数バックオフでリトライする。
+ * 恒久的なエラー（キー不正・400 等）は即座に投げ、無駄に待たない。
+ * 既定：最大3リトライ、待ち 0.6s → 1.2s → 2.4s。
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  { retries = 3, baseMs = 600 }: { retries?: number; baseMs?: number } = {},
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (attempt === retries || !isTransientError(e)) throw e;
+      await sleep(baseMs * 2 ** attempt);
+    }
+  }
+  throw lastError;
+}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getGemini, MODEL_CHAT, SAFETY_SETTINGS } from "@/lib/gemini";
+import { getGemini, MODEL_CHAT, SAFETY_SETTINGS, withRetry } from "@/lib/gemini";
 import { getSupabase } from "@/lib/supabase";
 import type { ChatMessage } from "@/types/chat";
 import type { Playthrough } from "@/types/playthrough";
@@ -58,16 +58,18 @@ export async function POST(req: Request) {
   const ai = getGemini();
   let log: string;
   try {
-    const response = await ai.models.generateContent({
-      model: MODEL_CHAT,
-      contents: `【今回のプレイ会話】\n${transcript}`,
-      config: {
-        systemInstruction: system,
-        maxOutputTokens: 1500,
-        thinkingConfig: { thinkingBudget: 0 },
-        safetySettings: SAFETY_SETTINGS,
-      },
-    });
+    const response = await withRetry(() =>
+      ai.models.generateContent({
+        model: MODEL_CHAT,
+        contents: `【今回のプレイ会話】\n${transcript}`,
+        config: {
+          systemInstruction: system,
+          maxOutputTokens: 1500,
+          thinkingConfig: { thinkingBudget: 0 },
+          safetySettings: SAFETY_SETTINGS,
+        },
+      }),
+    );
     log = response.text ?? "";
   } catch (e) {
     return NextResponse.json(
