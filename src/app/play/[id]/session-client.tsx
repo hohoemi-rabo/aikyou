@@ -57,8 +57,8 @@ function isChatFontSize(v: string): v is ChatFontSize {
  * 画像は public/maps/ に置く。差し替え・ラベル変更はここだけ直せばよい。
  */
 const MAPS: { src: string; label: string }[] = [
-  { src: "/maps/map1.png", label: "地図1" },
-  { src: "/maps/map2.png", label: "地図2" },
+  { src: "/maps/map1.png", label: "地上世界" },
+  { src: "/maps/map2.png", label: "アレフガルド" },
 ];
 
 export default function SessionClient({
@@ -489,19 +489,20 @@ export default function SessionClient({
           recording ? "min-h-[75vh]" : "min-h-[40vh]"
         }`}
       >
-        {/* マップ（録画モード時のみ）。チャットに重ねて表示し、タブで切り替える。 */}
+        {/* マップ（録画モード時のみ）。チャットに重ねて表示し、タブで切り替える。
+            地図は透過PNG（黒文字＋クリーム色の陸地）なので、背景は白にして見やすくする。 */}
         {recording && mapsOpen && (
-          <div className="absolute inset-0 z-10 flex flex-col gap-2 rounded-lg bg-slate-900 p-3">
+          <div className="absolute inset-0 z-10 flex flex-col gap-2 rounded-lg bg-white p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex flex-wrap gap-1">
                 {MAPS.map((m, i) => (
                   <button
                     key={m.src}
                     onClick={() => setMapIndex(i)}
-                    className={`rounded border px-3 py-1 text-sm ${
+                    className={`rounded border px-3 py-1 text-sm font-medium ${
                       mapIndex === i
-                        ? "border-blue-500 bg-blue-600 text-white"
-                        : "border-slate-600 text-slate-200 hover:bg-slate-800"
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-100"
                     }`}
                   >
                     {m.label}
@@ -510,7 +511,7 @@ export default function SessionClient({
               </div>
               <button
                 onClick={() => setMapsOpen(false)}
-                className="shrink-0 rounded border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:bg-slate-800"
+                className="shrink-0 rounded border border-slate-300 px-3 py-1 text-sm text-slate-700 hover:bg-slate-100"
               >
                 閉じる ×
               </button>
