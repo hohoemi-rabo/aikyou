@@ -776,13 +776,19 @@ function Synopsis({ state }: { state: PlaythroughState }) {
             "まだ編成されていません"
           ) : (
             <ul className="list-inside list-disc">
-              {party.map((m, i) => (
-                <li key={i}>
-                  {toText(m.name) || "（名前未設定）"}
-                  {m.job ? `／${toText(m.job)}` : ""}
-                  {typeof m.level === "number" ? `／Lv.${m.level}` : ""}
-                </li>
-              ))}
+              {party.map((m, i) => {
+                const name = toText(m.name) || "（名前未設定）";
+                // 職業は job 推奨だが AI が class 等で返すことがあるので拾う。
+                // 名前が職業と同じ（名前未設定で職業名が入っている）ときは重複表示しない。
+                const job = toText(m.job ?? m.class);
+                return (
+                  <li key={i}>
+                    {name}
+                    {job && job !== name ? `／${job}` : ""}
+                    {typeof m.level === "number" ? `／Lv.${m.level}` : ""}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </dd>

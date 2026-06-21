@@ -26,7 +26,10 @@ export function formatState(state: PlaythroughState): string {
   if (party.length > 0) {
     lines.push("【パーティ】");
     for (const m of party) {
-      const job = m.job ? `／${m.job}` : "";
+      // 職業は job 推奨だが、AI が class 等で返すことがあるので拾う。
+      // 名前が職業と同じ（名前未設定で職業名が入っている）ときは重複表示しない。
+      const jobValue = m.job ?? (typeof m.class === "string" ? m.class : undefined);
+      const job = jobValue && jobValue !== m.name ? `／${jobValue}` : "";
       const level = typeof m.level === "number" ? `／Lv.${m.level}` : "";
       lines.push(`- ${m.name ?? "（名前未設定）"}${job}${level}`);
     }
