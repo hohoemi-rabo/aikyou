@@ -40,6 +40,11 @@ yarn-error.log*
 # mcp (contains local/secret server config)
 .mcp.json
 
+# マップ画像（DQ3 はスクウェア・エニックスの著作物。ローカル利用のみ・再配布しない）
+# 画像は public/maps/ にローカルで置く。フォルダ構造だけ .gitkeep で残す。
+/public/maps/*
+!/public/maps/.gitkeep
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

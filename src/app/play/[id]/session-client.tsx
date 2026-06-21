@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import type { ChatMessage } from "@/types/chat";
 import type { PlaythroughState, Persona } from "@/types/playthrough";
 import { updatePersona } from "@/app/actions";
@@ -51,6 +52,15 @@ function isChatFontSize(v: string): v is ChatFontSize {
   return v === "base" || v === "lg" || v === "2xl";
 }
 
+/**
+ * 録画モードで重ねて表示するマップ画像（タブで切替）。
+ * 画像は public/maps/ に置く。差し替え・ラベル変更はここだけ直せばよい。
+ */
+const MAPS: { src: string; label: string }[] = [
+  { src: "/maps/map1.png", label: "地図1" },
+  { src: "/maps/map2.png", label: "地図2" },
+];
+
 export default function SessionClient({
   id,
   title,
@@ -99,6 +109,10 @@ export default function SessionClient({
   // 録画モード（会話だけを大きく表示）と文字サイズ。録画するときだけ ON にする。
   const [recording, setRecording] = useState(false);
   const [chatFontSize, setChatFontSize] = useState<ChatFontSize>("lg");
+
+  // マップ表示（録画モード時のみ）。チャットに重ねて、タブで1枚ずつ切り替える。
+  const [mapsOpen, setMapsOpen] = useState(false);
+  const [mapIndex, setMapIndex] = useState(0);
 
   // 声・読み上げON/OFF・録画設定はプレイスルーごとに localStorage で記憶し、再開時に復元する。
   // localStorage は SSR で参照できないため、マウント後（useEffect）に読み込む。
@@ -379,6 +393,19 @@ export default function SessionClient({
               ))}
             </div>
           )}
+          {/* 録画モード中だけマップの出し入れができる。 */}
+          {recording && (
+            <button
+              onClick={() => setMapsOpen((v) => !v)}
+              className={`rounded border px-3 py-1.5 text-sm ${
+                mapsOpen
+                  ? "border-blue-500 bg-blue-600 text-white hover:bg-blue-500"
+                  : "border-slate-600 text-slate-200 hover:bg-slate-800"
+              }`}
+            >
+              🗺 マップ
+            </button>
+          )}
           {!recording && (
             <button
               onClick={() => setPersonaOpen((v) => !v)}
@@ -458,10 +485,49 @@ export default function SessionClient({
 
       {/* チャット */}
       <section
-        className={`flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 ${
+        className={`relative flex flex-col gap-3 rounded-lg border border-slate-700 bg-slate-800 p-4 ${
           recording ? "min-h-[75vh]" : "min-h-[40vh]"
         }`}
       >
+        {/* マップ（録画モード時のみ）。チャットに重ねて表示し、タブで切り替える。 */}
+        {recording && mapsOpen && (
+          <div className="absolute inset-0 z-10 flex flex-col gap-2 rounded-lg bg-slate-900 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap gap-1">
+                {MAPS.map((m, i) => (
+                  <button
+                    key={m.src}
+                    onClick={() => setMapIndex(i)}
+                    className={`rounded border px-3 py-1 text-sm ${
+                      mapIndex === i
+                        ? "border-blue-500 bg-blue-600 text-white"
+                        : "border-slate-600 text-slate-200 hover:bg-slate-800"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setMapsOpen(false)}
+                className="shrink-0 rounded border border-slate-600 px-3 py-1 text-sm text-slate-200 hover:bg-slate-800"
+              >
+                閉じる ×
+              </button>
+            </div>
+            <div className="relative flex-1">
+              <Image
+                src={MAPS[mapIndex].src}
+                alt={MAPS[mapIndex].label}
+                fill
+                sizes="100vw"
+                unoptimized
+                className="object-contain"
+              />
+            </div>
+          </div>
+        )}
+
         <div
           ref={scrollRef}
           onScroll={handleChatScroll}
